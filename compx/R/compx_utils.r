@@ -48,3 +48,18 @@ get_census_data <- function(state, counties, table_num, end_year=2012, span=5){
 
 	return(df_merged)
 }
+
+#' Get the centroids for a bunch of spatial data.
+#'
+#' @param data the SpatialPolygon data for which to compute centroids
+#'
+#' @return a matrix of centroid coordinates
+#'
+#' @export
+
+get_centroids <- function(data){
+	require(rgeos)
+	centroids <- gCentroid(data,byid=TRUE)
+	centroids <- centroids@coords
+	return(centroids)
+}
