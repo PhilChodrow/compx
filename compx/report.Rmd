@@ -47,7 +47,7 @@ library(compx)
 income_merged <- get_census_data(state = state, counties = counties, table_num = "B19001")
 
 income_merged@data <- income_merged@data %>%
-    mutate(percent =  Household.Income..Less.than..10.000 / Household.Income..Total.,
+    mutate(percent =  100 * Household.Income..Less.than..10.000 / Household.Income..Total.,
     	   ID = row.names(income_merged))
 
 popup <- paste0('Total Respondents: ', income_merged$Household.Income..Total.)
@@ -74,11 +74,11 @@ map
 ```
 
 ```{r}
-centroids <- gCentroid(income_merged,byid=TRUE) # requires rgeos
-centroids <- centroids@coords
-write.csv(centroids, 'centroids.csv')
-write.csv(income_merged@data, 'income.csv')
+centroids <- get_centroids(income_merged)
+table <- get_table(income_merged)
 ```
+
+We should maybe make a faceted ggplot of the data by category? This would help us see a bit more clearly what we are modeling. However, it may be challenging to make this legible for large categories. 
 
 ## Clean Data
 

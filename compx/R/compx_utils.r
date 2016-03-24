@@ -31,7 +31,7 @@ get_census_data <- function(state, counties, table_num, end_year=2012, span=5){
 	data <-acs.fetch(endyear = 2012,
 					   span = 5,
 					   geography = geo.make(state = state, county = counties, tract = '*', block.group = '*'),
-					   table.number = table_name,
+					   table.number = table_num,
 					   col.names = "pretty")
 
 	polys <- block_groups(state = state, county = counties, cb=TRUE)
@@ -63,3 +63,18 @@ get_centroids <- function(data){
 	centroids <- centroids@coords
 	return(centroids)
 }
+
+#' Get matching df for a bunch of spatial data
+#'
+#' @param data the SpatialPolygon data for which to compute centroids
+#'
+#' @return df the complete set of data corresponding to the SpatialPolygons, keyed by ID to match with them.
+#'
+#' @export
+
+get_table <- function(data){
+	data@data <- data@data %>%
+		mutate(ID = row.names(data))
+	return(data@data)
+}
+
