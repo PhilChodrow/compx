@@ -23,28 +23,27 @@ We'd like to do some analysis.
 
 ## Retrieve Data
 
+
+```{r library, message=FALSE, warning=FALSE}
+
+library(compx)
+library(dplyr)
+library(leaflet)
+```
+
+
 ```{r params, message=FALSE, warning=FALSE}
 # PARAMS
 # But figure out how to do parameterized reports eventually
 
-state    <- 'MA'
+states   <- 'MA'
 counties <- c(025)
-```
-
-```{r library, message=FALSE, warning=FALSE}
-library(tigris)
-library(acs)
-library(stringr)
-library(dplyr)
-library(leaflet)
-library(rgeos)
-library(compx)
 ```
 
 
 ```{r viz, message=FALSE, warning=FALSE}
 
-income_merged <- get_census_data(state = state, counties = counties, table_num = "B19001")
+income_merged <- get_census_data(state = states, counties = counties, table_num = "B19001")
 
 income_merged@data <- income_merged@data %>%
     mutate(percent =  100 * Household.Income..Less.than..10.000 / Household.Income..Total.,
@@ -76,6 +75,7 @@ map
 ```{r}
 centroids <- get_centroids(income_merged)
 table <- get_table(income_merged)
+table
 ```
 
 We should maybe make a faceted ggplot of the data by category? This would help us see a bit more clearly what we are modeling. However, it may be challenging to make this legible for large categories. 
