@@ -1,0 +1,19 @@
+Package: compx
+Title: Analyze the spatial complexity of compositional data
+Version: 0.0.0.9000
+Authors@R: person("Phil", "Chodrow", email = "pchodrow@gmail.com", role = c("aut", "cre"))
+Description: Analyze the spatial complexity of compositional data
+Depends:
+    R (>= 3.1.3)
+Imports:
+    dplyr,
+    acs,
+    rgeos,
+    leaflet,
+    stringr,
+    mvtnorm
+License: CC0
+LazyData: true
+VignetteBuilder: knitr
+RoxygenNote: 5.0.1
+Suggests: testthat

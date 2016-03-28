@@ -1,0 +1,108 @@
+---
+title: "Spatial Compositional Complexity"
+author: "Phil"
+date: "March 23, 2016"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 1
+    theme: flatly
+    code_folding: hide
+---
+
+# Introduction
+
+The purpose of this document is to fix notation and establish preliminary results for an approach to spatial compositional complexity measurement using logratio transforms. See [the notes](https://github.com/PhilChodrow/compositional-complexity/blob/master/methods/logratio.pdf) for a full mathematical development of the topic. 
+
+Our goal is to test these methods on census data. 
+
+# Analysis
+
+We'd like to do some analysis. 
+
+## Retrieve Data
+
+
+```{r library, message=FALSE, warning=FALSE}
+
+library(compx)
+library(dplyr)
+library(leaflet)
+```
+
+
+```{r params, message=FALSE, warning=FALSE}
+# PARAMS
+# But figure out how to do parameterized reports eventually
+
+states   <- 'MA'
+counties <- c(025)
+```
+
+
+```{r viz, message=FALSE, warning=FALSE}
+
+income_merged <- get_census_data(state = states, counties = counties, table_num = "B19001")
+
+income_merged@data <- income_merged@data %>%
+    mutate(percent =  100 * Household.Income..Less.than..10.000 / Household.Income..Total.,
+    	   ID = row.names(income_merged))
+
+popup <- paste0('Total Respondents: ', income_merged$Household.Income..Total.)
+pal <- colorNumeric(
+  palette = "YlGnBu",
+  domain = income_merged$percent
+)
+
+map <-leaflet() %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(data = income_merged, 
+              fillColor = ~pal(percent), 
+              color = "#b2aeae", # you need to use hex colors
+              fillOpacity = 0.7, 
+              weight = 1, 
+              smoothFactor = 0.2,
+              popup = popup) %>%
+  addLegend(pal = pal, 
+            values = income_merged$percent, 
+            position = "bottomright", 
+            title = "Percent of Households<br>below $10k",
+            labFormat = labelFormat(suffix = "%")) 
+map 
+```
+
+```{r}
+centroids <- get_centroids(income_merged)
+table <- get_table(income_merged)
+table
+```
+
+We should maybe make a faceted ggplot of the data by category? This would help us see a bit more clearly what we are modeling. However, it may be challenging to make this legible for large categories. 
+
+## Clean Data
+
+- Matrix of locations; i.e. centroids of population tracts
+- Matrix of data
+
+## Write Core Functions
+
+- Compute objective function
+- Compute row-wise entropy of data
+- Compute spatial influence function values
+
+## Implement Gradient Descent
+
+- Consider that it may be best to use a pre-existing R package for this task, depending on how computationally intensive this turns out to be. 
+
+## Analyze results
+How did we do?
+- Curves of params vs. information loss
+- Consider whether there might be an appropriate normalizer for comparisons between cities or between different indicators in the same city. 
+- Under what circumstances would we say that the model "fails"?
+
+## Additional software
+
+- Pre-processing script
+- Core function definitions (as a package?) See [this](http://rmflight.github.io/posts/2014/07/analyses_as_packages.html) and [this](http://rmflight.github.io/posts/2014/07/vignetteAnalysis.html) for the why and how. 
+- makefile (parameterized?)
