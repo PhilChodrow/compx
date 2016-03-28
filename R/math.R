@@ -70,7 +70,6 @@ normal_vec <- function(x, Mu, Sigma){
 #' @param Sigma list a list of covariance matrices
 #' @param C vector the vector of scale coefficients
 #' @return vector the estimates at x
-#' @export
 
 single_estimate <- function(x, Q, Mu, Sigma, C = 1){
 	densities <- normal_vec(x, Mu, Sigma)
@@ -92,7 +91,6 @@ estimate <- function(X, Q, Mu, Sigma, C = 1){
 		do.call(cbind, .)
 	return(ests)
 }
-
 
 #' Normalize a nonnegative vector so that it lies in the probability simplex
 #' @param p vector the vector

@@ -2,7 +2,7 @@ library(compx)
 library(dplyr, quietly = TRUE, warn.conflicts = FALSE)
 library(matrixcalc)
 
-context('Test randoms')
+context('Random data and param generators')
 
 test_that("Random compositional data lies on simplex", {
 	I <- sample(1:10, 1)
