@@ -1,0 +1,10 @@
+.Rproj.user
+.Rhistory
+.RData
+.aux
+.fls
+.log
+.synctex.gz
+.fdb_latexmk
+.csv
+.html
