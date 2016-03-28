@@ -2,7 +2,7 @@ library(compx)
 library(dplyr, quietly = TRUE, warn.conflicts = FALSE)
 library(matrixcalc)
 
-context('Check properties of random data generators')
+context('Test randoms')
 
 test_that("Random compositional data lies on simplex", {
 	I <- sample(1:10, 1)
@@ -18,7 +18,7 @@ test_that('Random data generator gives as many locs as distributions',{
 	J <- sample(1:20, 1)
 
 	data <- random_data(n, I, J)
-	expect_equal(length(data$locs), dim(data$distributions)[2])
+	expect_equal(length(data$X), dim(data$P)[2])
 })
 
 test_that('Random PD matrix generator does indeed return a PD matrix',{
@@ -33,12 +33,8 @@ test_that('Random param generator gives valid aprams',{
 	n <- sample(5:10,1)
 	K <- sample(10:20, 1)
 	J <- sample(5:10, 1)
-	params <- random_params(n, K, J)
 
-	Q = params$Q
-	Mu = params$Mu
-	Sigma = params$Sigma
-	C = params$C
+	random_params(n, K, J) %>% attach
 
 	# Shape tests
 	expect_equal(length(C), K)

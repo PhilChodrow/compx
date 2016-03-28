@@ -11,7 +11,8 @@ Imports:
     rgeos,
     leaflet,
     stringr,
-    mvtnorm
+    mvtnorm,
+    matrixcalc
 License: CC0
 LazyData: true
 VignetteBuilder: knitr
