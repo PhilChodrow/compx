@@ -1,7 +1,6 @@
 *.Rproj.user
 *.Rhistory
 *.RData
-*.aux
 *.fls
 *.log
 *.synctex.gz

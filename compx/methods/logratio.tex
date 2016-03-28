@@ -1,0 +1,144 @@
+
+% -----------------------------------------------------------------------------
+% ------------------------------- PREAMBLE ------------------------------------
+% -----------------------------------------------------------------------------
+	\documentclass[english]{scrartcl}
+
+	\title{Logratio Approach}
+	\subtitle{v0.0}
+	\author{Phil Chodrow}
+	\date{March 20th, 2016}
+
+	\usepackage[T1]{fontenc}
+	\usepackage[utf8]{inputenc}
+	\usepackage{babel}
+	\usepackage{blindtext}
+	\usepackage{amsmath}
+	\usepackage{amsthm}
+	\usepackage{amsfonts}
+	\usepackage{amssymb}
+
+	\setkomafont{disposition}{\normalfont\bfseries}
+
+	\newtheorem{thm}{Theorem}
+	\newtheorem{lm}{Lemma}
+	\newtheorem{cor}{Corrolary}
+	\newtheorem{clm}{Claim}
+	\newtheorem*{thm*}{Theorem}
+	\newtheorem*{lm*}{Lemma}
+	\newtheorem*{cor*}{Corrolary}
+	\newtheorem*{clm*}{Claim}
+
+	\newcommand\abs[1]{\left|#1\right|}
+	\newcommand\E[0]{\mathbb{E}}
+	\newcommand\R[0]{\mathbb{R}}
+	\newcommand\decision[2]{\underset{#2}{\overset{#1}{\gtreqless}}}
+	\newcommand{\argmax}{\operatornamewithlimits{argmax}}
+	\newcommand{\argmin}{\operatornamewithlimits{argmin}}
+	\newcommand\prob[0]{\mathbb{P}}
+
+% -----------------------------------------------------------------------------
+% --------------------------------- BODY --------------------------------------
+% -----------------------------------------------------------------------------
+
+\begin{document}
+
+\maketitle
+
+\section{Purpose}
+	The purpose of this document is to fix notation and establish preliminary results for an approach to spatial compositional complexity measurement using logratio transforms.
+
+\section{Problem Setup and Notation}
+	We consider the following problem. Suppose that we observe a vector of $J+1$-dimensional  data $p^i = [p^i_0,\ldots,p^i_J]$ at each of $I$ points $x^i \in \R^M$. We assume that our observations are \textit{compositional} data with $p^i>0$ and $\sum_{j=0}^J p^i_j =1$ at each $x^i$. We can then express our data as a matrix $P_{ij} = p^i_j$, where the $i$th row represents a point in $\R^M$ and the $j$th column represents a compositional category. An example of such data would be a Census data set of income categories for multiple tracts, in which case the $ij$th entry of $P$ would be the proportion of respondents in the $i$th Census tract who reported that they fall in the $j$th category of income.
+
+	We would like to construct a model matrix $Q$ of
+	\begin{enumerate}
+		\item Provides a good representation of $P$, where ``good'' is defined in information-theoretic terms and
+		\item Reflects the spatial structure of the data.
+	\end{enumerate}
+	Like $P$, the rows of $Q$ should satisfy $q^i > 0$ and $\sum_{j = 0}^J q^i_j = 1$.
+	The information-theoretic sense of ``goodness'' we will use is the Kullback-Leibler divergence. Define $f:\R^{I \times (J+1)} \times \R^{I \times (J+1)} \rightarrow \R$ by
+	\begin{equation}
+		f(P,Q) = \sum_{i=1}^I D[p^i\|q^i] = \sum_{i = 1}^I \sum_{j = 0}^J p^i_j \log \frac{p^i_j}{q^i_j}\;. \label{objective}
+	\end{equation}
+	The (summed) divergence has an intuitive characterization: it is the amount of information (in bits) I would need to give you in addition to the model $Q$ in order for you to reconstruct the true data $P$. For each $i$, Gibbs' inequality implies that $D[p^i\|q^i]$ attains its minimum of $0$ if and only if $p^i = q^i$; thus, $f(P,Q) = 0$ iff $P = Q$.
+
+	To represent spatial structure, we stipulate that
+	\begin{equation}
+		q^i = \sum_{k = 1}^K \lambda^k(x^i) Q^k, \label{spatial_structure}
+	\end{equation}
+	where $Q^k$ is one of $K < M$ ``representative'' compositions. The function $\lambda^k:\R^M\rightarrow \R$ reflects the ``influence'' of the representative composition $\bar{q}^k$ at $x^i$. Thus, $Q$ can be fully determined by specifying $K$ representative compositions $Q^k$ and influence functions $\lambda^k$.
+
+	The compositional constraints $q^i > 0$ and $\sum_{j = 0}^J q^i_j = 1$ may seem to require some rather stringent assumptions on $Q^k$ and $\lambda^k$. We can circumvent this technical issue using the standard toolbox of compositional data analysis.
+
+\section{Compositional Tools}
+	The logratio transformation is a standard map that transforms compositional data into general data. The map $L:\R^{J+1} \rightarrow \R^J$ is defined by
+	\begin{equation}
+		\bar{p} = L(p) = \left[\log \frac{p_1}{p_0},\ldots,\log \frac{p_J}{p_0}\right]\;.
+	\end{equation}
+	Its inverse is
+	\begin{equation}
+		p = L^{-1}(\bar{p}) = \mathcal{C}\exp\left\{[0, \bar{p}] \right\}\;,
+	\end{equation}
+	where the exponential operator is applied componentwise and $\mathcal{C}$ is the closure operator
+	\begin{equation}
+		\mathcal{C}y = \frac{y}{\mathbf{1}\cdot y} \;.
+	\end{equation}
+	We would like to use this transformation to simplify the objective function \eqref{objective}. To do so, we first note that
+	\begin{align}
+		D[p^i\|q^i] &= \sum_{j = 0}^J p^i_j \log \frac{p^i_j}{q^i_j} \\
+		&= \sum_{j = 0}^J p^i_j \log p_j^i - \sum_{j = 0}^J p^i_j \log q_j^i \\
+		&= H[p^i] - \sum_{j = 0}^J p^i_j \log q_j^i\;.
+	\end{align}
+	The first term is the entropy of the $i$th row of $P$ and depends only on the data. We can therefore focus on the second term when minimizing. Using the logratio transformation, we can write this term as
+	\begin{align}
+		- \sum_{j = 0}^J p^i_j \log q_j^i &= - \sum_{j = 0}^J p^i_j \log L^{-1}(\bar{q}^i)_j \\
+		&= - \sum_{j = 0}^J p^i_j \log \mathcal{C}\exp\{[0,\bar{q}^i]\}_j \\
+		&= - \sum_{j = 0}^J p^i_j \log \exp\{[0,\bar{q}^i]\}_j + \sum_{j=0}^J p^i_j \log \left(1 + \sum_{j = 1}^J e^{\bar{q}^i_j}\right)\\
+		&= - \sum_{j = 0}^J p^i_j \log \exp\{[0,\bar{q}^i]\}_j + \log \left(1 + \sum_{j = 1}^J e^{\bar{q}^i_j}\right) \\
+		&= - \sum_{j = 1}^J p^i_j \bar{q}^i_j  + \log \left(1 + \sum_{j = 1}^J e^{\bar{q}^i_j}\right)\;. \label{transformed}
+	\end{align}
+	We should note three points about the transformed objective \eqref{transformed}. First, \eqref{transformed} is unconstrained in the decision variables $\bar{q}^i$; other than being strictly positive, no compositional constraint is enforced. This allows us to circumvent the possible computational difficulties associated with working with \eqref{objective} and \eqref{spatial_structure} directly. In particular, we can seek representative compositions $\bar{Q}^k$ and functions $\bar{\lambda}^k$ such that the assignment
+	\begin{equation}
+		\bar{q}^i = \sum_{k=1}^K \bar{\lambda}_k(x^i) \bar{Q}^k \label{spatial_transformed}
+	\end{equation}
+	minimizes \eqref{transformed}.
+	Second, the two terms of \eqref{transformed} are nicely interpretable: the first term rewards transformed decision variables $\bar{q}^i$ that are parallel to the last $J$ coordinates of $p^i$, while the second term punishes us for choosing transformed decision variables that are too large in magnitude. Third and finally, Jensen's inequality allows us to bound \eqref{transformed} from above as
+	\begin{align}
+		- \sum_{j = 1}^J p^i_j \bar{q}^i_j  + \log \left(1 + \sum_{j = 1}^J e^{\bar{q}^i_j}\right) &\geq - \sum_{j = 1}^J p^i_j \bar{q}^i_j + \sum_{j=1}^J \bar{q}_j^i \\
+		&= \sum_{j=1}^J (1 - p_j^i)\bar{q}_j^i\;, \label{approx}
+	\end{align}
+	which is linear in the decision variables $\bar{q}_j^i$. If we find that the full problem \eqref{transformed} is not tractable, it may be useful to consider \eqref{approx} as a computational alternative.
+	Our final simplification is to assume that the influence functions $\bar{\lambda}_k$ share a common functional form, expressed as $\bar{\lambda}_k(x^i) = \bar{\lambda}(x^i|\theta^k)$, where the parameters $\theta^k$ distinguish each influence function. Then, \eqref{spatial_transformed} becomes
+	\begin{equation}
+		\bar{q}^i = \sum_{k=1}^K \bar{\lambda}(x^i|\theta^k) \bar{Q}^k \label{spatial_transformed_2}
+	\end{equation}
+	In practice, we'll be most interested in the case in which $\bar{\lambda}$ is a normal density, in which case the parameters $\theta^k$ will include the mean and covariance.
+
+	\section{Computing Gradients}
+		Since everything in sight is differentiable, we can consider elementary first-order methods. To do this requires the computation of derivatives. Let $g_i:\R^J \rightarrow \R$ be given by
+		\begin{equation}
+			g_i(\bar{q}^i) = - \sum_{j = 1}^J p^i_j \bar{q}^i_j  + \log \left(1 + \sum_{j = 1}^J e^{\bar{q}^i_j}\right)\;,
+		\end{equation}
+		and $h_i:\Theta \times \R^{K\times J} \rightarrow \R^J$ be given by
+		\begin{equation}
+		 	h_i(\theta, \bar{Q}) = \sum_{k=1}^K \lambda(x^i|\theta^k) \bar{Q}^k\;.
+		\end{equation}
+		Then, the $i$th term of the objective function \eqref{transformed} can be written as $(g_i \circ h_i)(\theta, \bar{Q})$. The derivatives we need are now
+		\begin{align}
+			Dg_i(\bar{q}) &=  -p^i + \frac{\exp \bar{q}^i}{1 + \mathbf{1} \cdot \exp{\bar{q}^i}} \;,
+		\end{align}
+		which is a $1\times J$ row vector, and
+		\begin{align}
+			Dh_i(\theta, \bar{Q}) = \left[\begin{array}{c c c c}
+				\vdots & \vdots & \vdots & \vdots \\
+				\sum_{k=1}^K Q^k_j D \lambda(x^i|\theta^k) & \lambda(x^i|\theta^1) & \cdots &  \lambda(x^i|\theta^K)\\
+				\vdots & \vdots & \vdots & \vdots
+			\end{array}\right]
+		\end{align}
+		which is a $J \times (L + K)$ matrix. The gradient of the objective function can now be computed by the chain rule, which in this case takes the form
+		\begin{equation}
+			\nabla f(\theta, \bar{Q}) = \sum_{i=1}^I Dg_i(h(\theta, \bar{Q})) \cdot Dh_i(\theta,\bar{Q})
+		\end{equation}
+		The primary remaining task would be an implementation of a first-order method based on this gradient, such as classical gradient descent. Newton's method would be a possibility if we found the performance of classical gradient descent to be lacking.
+\end{document}
