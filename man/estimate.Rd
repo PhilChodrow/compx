@@ -2,12 +2,12 @@
 % Please edit documentation in R/math.R
 \name{estimate}
 \alias{estimate}
-\title{Find the spatially-structured estimate at a location x}
+\title{Find the spatially-structured estimate at multiple locations X}
 \usage{
-estimate(x, Q, Mu, Sigma, C = 1)
+estimate(X, Q, Mu, Sigma, C = 1)
 }
 \arguments{
-\item{x}{vector the location}
+\item{X}{list of location vectors}
 
 \item{Q}{matrix the matrix of representative distributions}
 
@@ -21,6 +21,6 @@ estimate(x, Q, Mu, Sigma, C = 1)
 vector the estimates at x
 }
 \description{
-Find the spatially-structured estimate at a location x
+Find the spatially-structured estimate at multiple locations X
 }
 

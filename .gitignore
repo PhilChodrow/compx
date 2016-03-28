@@ -10,3 +10,5 @@
 *.pdf
 *.Rproj
 *.Rbuildignore
+
+.Rproj.user
