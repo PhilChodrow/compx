@@ -4,10 +4,10 @@
 % -----------------------------------------------------------------------------
 	\documentclass[english]{scrartcl}
 
-	\title{Notes on Urban Information Theory}
-	\subtitle{v0.0}
+	\title{Spatial Compositional Complexity}
+	\subtitle{v0.1}
 	\author{Phil Chodrow}
-	\date{March 18th, 2016}
+	\date{March 29th, 2016}
 
 	\usepackage[T1]{fontenc}
 	\usepackage[utf8]{inputenc}
@@ -47,203 +47,140 @@
 \maketitle
 
 \section{Purpose}
-	The purpose of this document is to record Phil's notes on information-theoretic methods in summarizing spatially-structured arrays of empirical distributions of data. An example of such a data set would be income distributions, summarized on a block level for an entire city. At each (recorded) point in the data set, there is an empirical probability distribution of income.
+	The purpose of this document is to record Phil's notes on information-theoretic methods for summarizing spatially-structured arrays of empirically-observed compositional data. 
 
 	\subsection{Motivation}
-		A spatially-organized summary of such a data set would serve at least three useful purposes, corresponding to answers to the following questions.
+		A spatially-organized summary of such a data set would provide candidate answers to each of the following questions: 
 		\begin{enumerate}
-			\item What is the `scale' of spatial heterogeneity in a city? For example, if Dorchester is substantially poorer than the rest of Boston, is that a `Dorchester-level' phenomenon? Or is it an amalgamation of smaller spatial phenomena that may need a separate or coordinated approach?
+			\item What is the ``scale'' of spatial heterogeneity in a city? For example, if Dorchester is substantially poorer than the rest of Boston, is that a `Dorchester-level' phenomenon? Or is it an amalgamation of smaller spatial phenomena that may need a separate or coordinated approach?
 			\item Suppose we'd like to construct a generative theory of a spatially-distributed phenomenon based on some data. In the study of complex systems, we may not insist on a theory that perfectly reconstructs the data, but we should expect it to get the `high-level' features right. What are those features that such a theory should replicate?
+			\item To what extent can a set of compositional data be explained by spatial effects? What phenomena in the data are decidedly ``nonspatial''?
 			\item How complex is a city's distribution of income, as compared to other cities?
 		\end{enumerate}
-		The answers an information-theoretic summary would provide are:
-		\begin{enumerate}
-			\item Suppose that we run our model and find that the spatial organization of income distributions in Dorchester is best modeled as a mixture of three different `core' distributions. This would be reason to think that there are (at least) three phenomena deserving of study and intervention in the area.
-			\item A mixture model would `compress' the spatial organization of distributions, recording precisely those features that contain the most information about the system. A reasonable approach would be to insist that a generative theory recover approximately these features, at some chosen level of detail.
-			\item A model of the spatial organization of distributions can be considered as a form of data compression. To see this, suppose that we have a collection of $\mathcal{X}$ of spatial observations, where $\abs{\mathcal{X}} = N$. At each point $x\in \mathcal{X}$, we have a distribution $p^x$ over an alphabet $\mathcal{Y}$ of possible categories, where $\abs{\mathcal{Y}} = M$. As an example, $\mathcal{X}$ might consist of the centroids of Census tracts, and $\mathcal{Y}$ the income categories used in the survey. To fully describe the uncompressed data would require $N(M-1)$ numbers -- since each $p^x$ must be a valid probability distribution, we have $\sum_{y\in \mathcal{Y}} p^x(y) = 1$ for all $x\in \mathcal{X}$, which eliminates a degree of freedom at each location. Suppose that, for a given number $P$, we were able to provide an optimal description of the organization using just $P$ numbers, where $P < N(M-1)$ and where optimality is measured in terms of minimal information loss. We could then plot information loss against $P$, obtaining a complexity profile curve. Such curves could be compared between cities, or between spatially-organized observables in the same city, giving a quantitative way to compare complexity across locations and phenomena.
-		\end{enumerate}
-
-
-
-
 \section{Methods}
-	\subsection{Main Problem}
-		Suppose that at each location $x \in \mathcal{X}$, we have an observed distribution $p^x$ over $\mathcal{Y}$. Thus, our data consist of the matrix $p^x(y)$ for all $(x,y) \in \mathcal{X} \times \mathcal{Y}$. We would like to approximate $p^x(y) \approx q^x(y)$, where
-		\begin{equation}
-			q^x(y) = \sum_{i=1}^K \lambda_i(x) q_i(y)
-		\end{equation}
-		Intuitively: our model consists of $K$ `representative' distributions $q_i$, $i = 1,\ldots,K$, that mix spatially acording to coefficients $\lambda_i(x)$ that measure how influential the distribution $q_i$ is at point $x$. Our computational task is to specify $\lambda_i$ and $q_i$ to make this approximation `good' in some relevant sense.
+	\subsection{Data}
+	Suppose that, for each $i = 1,\ldots,I$, we are given:
+	\begin{enumerate}
+		\item A vector $x^i\in \R^n$.
+		\item A vector $\mathbf{p}^i \in \mathcal{S}^J$, where $\mathcal{S}^J = \{\mathbf{p} | \mathbf{p} \geq 0,\; \sum_{j = 1}^J p_j = 1\}$. Such data is sometimes referred to as ``compositional data'' because it reflects the composition of a whole, rather than individual magnitudes. 
+	\end{enumerate}
+	A natural class of such data are demographics organized by spatial tracts, for which $n = 2$. For example, the Census collects data on income by block group. For example, in the 2012 American Community Survey data for the city of Boston, the number of block groups $I = 646$ and the number of categories $J = 16$. Each $x^i \in \R^2$ would then be the centroid of the corresponding tract. 
 
-		Note that, while $q_i \in \mathcal{P}^{\mathcal{Y}}$ and is therefore finite-dimensional, $\lambda_i$ is as yet unconstrained. We need to impose an assumption about the functional form of $\lambda_i$ in order to make this problem finite-dimensional. Suppose that we require that each $q_i$ be a member of a family of functions specified by $J$ parameters. Then, we can specify the model in $K(M-1 + J)$ parameters, which will be an improvement if $K << N$.
+	\subsection{Objective Function}
+	We would like to generate, at each location $x^i$, a model prediction $\mathbf{q}^i$ of the data $\mathbf{p}^i$ that is in some sense ``spatially structured.'' Since $\mathbf{p}^i$ is compositional, a natural loss function is the Kullback-Leibler divergence of the estimate $\mathbf{q}^i$ from the observed data $\mathbf{p}^i$: 
+	\begin{equation}
+		D[\mathbf{p}^i\|\mathbf{q}^i] \triangleq \sum_{j=1}^J p^i_j \log \left(\frac{p^i_j}{q^i_j} \right)
+	\end{equation}
+	If 
+	\begin{equation}
+		\mathbf{P} = \left[\begin{array}{c c c}
+			| & \cdots & | \\
+			\mathbf{p^1} & \cdots & \mathbf{p}^I \\
+			| & \cdots & | 
+		\end{array}\right],
+		\quad 
+		\mathbf{Q} = \left[\begin{array}{c c c}
+			| & \cdots & | \\
+			\mathbf{q^1} & \cdots & \mathbf{q}^I \\
+			| & \cdots & | 
+		\end{array}\right],
+	\end{equation}
+	then we can write the total objective function for the problem as 
+	\begin{equation}
+		f_\mathbf{P}(\mathbf{Q}) = \sum_{i = 1}^I D[\mathbf{p}^i \| \mathbf{q}^i]\;.
+	\end{equation}
+	Of course, setting $\mathbf{Q} = \mathbf{P}$ achieves the lower bound $f_\mathbf{P}(\mathbf{P}) = 0$, but this achieves no modeling value. 
 
-		A natural objective function is the divergence of the approximation $q^x$ from the data data $p^x$. We are therefore moved to consider the following problem:
+	\subsection{Spatial Structure}
+		To impose spatial structure on our model, we require that our estimates $\mathbf{Q}$ have the structure 
 		\begin{equation}
-			\min_{\lambda_i, q_i} \sum_{x \in \mathcal{X}} D[p^x\|q^x] = \min_{\lambda_i, q_i} \sum_{x \in \mathcal{X}} D\left[p^x\bigg\|\sum_{i=1}^K \lambda_i(x) q_i\right]\;. \label{main}
+			\mathbf{q}^i = \mathbf{R} \mathbf{\Lambda}(x^i) \label{spatial}
 		\end{equation}
-		A solution to this problem would enjoy a brand of information-theoretic optimality, in the sense that such a model would require the least additional information to fully recover the original data $p^x$.
+		where $K \leq I$, 
+		\begin{equation}
+		\mathbf{R} = \left[\begin{array}{c c c}
+			| & \cdots & | \\
+			\mathbf{r}^1 & \cdots & \mathbf{r}^K \\
+			| & \cdots & | 
+		\end{array}\right] \in \R^{J \times K}
+		\end{equation}
+		is a matrix of ``representative'' distributions, and $\mathbf{\Lambda}: \R^n \rightarrow \R^K$ describes how the representative distributions $\mathbf{R}$ mix spatially. In order for $\mathbf{q^i}$ to be a valid probability distribution, we require that $\mathbf{\Lambda}(x^i) \geq 0$ and $\sum_{k = 1}^K \lambda_k(x^i) = 1$ for all $i$. Thus, \eqref{spatial} states that each $\mathbf{q}^i$ is a convex combination of the representative distributions $\{\mathbf{r}^k\}$, where the convex coefficients are determined by the spatial location $x^i$. 
 
-	\subsection{Specifying $\lambda_i$}
-		For the sake of concreteness, we will primarily focus on the case in which each $\lambda_i$ is proportional to an element of a parameterized family of functions:
+		The modeling task is to find the matrix $\mathbf{R}$ and function $\mathbf{\Lambda}$. We need to restrict the set of candidate functions $\mathbf{\Lambda}$ such that: 
+		\begin{enumerate}
+		 	\item Elements of this set set reflect reasonably intuitive spatial structure. 
+		 	\item Optimizing over this set is computationally feasible, which we take to imply finite-dimensional. 
+		\end{enumerate} 
+		A set of functions that fits the bill is: 
 		\begin{equation}
-			\lambda_i(x) \propto \pi(x|\theta_i)\;,
+			\mathbf{L} = \left\{ \Lambda(x) = \frac{\mathbf{c} \bullet \Phi(x|\Theta)}{\mathbf{c} \cdot \Phi(x|\Theta)},\; \Phi(x|\Theta) = (\phi(x|\theta^1),\ldots, \phi(x|\theta^K)),\; \Theta = (\theta^1,\ldots,\theta^K), \; \mathbf{c}\in \R^K_+ \right\},
 		\end{equation}
-		where each $\theta_i$ is a vector of parameters. Since we must have $\sum_i \lambda_i(x) = 1$ for all $x\in \mathcal{X}$, this gives
+		where $\bullet$ is the Hadamard product and $\phi(x|\theta)$ is the multivariate Gaussians distribution with parameters $\theta$ evaluated at $x$. The set $\mathbf{L}$ is an attractive setting for us because:
+		\begin{enumerate}
+		 	\item Elements of this set depend spatially on $x$ through unimodal distributions, reflecting the idea that the influence of each representative distribution $\mathbf{q}^i$ is ``centered'' at the mean of the corresponding density and decays with distance. Some may be more absolutely ``influential'' than others, and will have high corresponding entries of $\mathbf{c}$. 
+		 	\item This set is finite dimensional: we need to fit $KJ$ entries of $\mathbf{R}$, $\frac{n(n+3)}{2}$ parameters for each of $K$ Gaussians, and $K$ parameters $\mathbf{c}$, giving a total problem dimension of $K\left(J +  \frac{n(n+3)}{2} + 1\right)$. 
+		\end{enumerate}
+	\subsection{Problem Statement}
+		With this framework in place, we can define our optimization problem. First, since 
 		\begin{equation}
-			\lambda_i(x) = \frac{c_i\pi(x|\theta_i)}{\sum_ic_i\pi(x|\theta_i)}
+			D[\mathbf{p}^i \| \mathbf{q}^i] = \sum_{j = 1}^J p^i_j \log \frac{p^i_j}{q^i_j} = \sum_{j = 1}^J p^i_j \log p^i_j - \sum_{j = 1}^J p^i_j \log q^i_j \;,
 		\end{equation}
-		where $c_i$ are constants. As above, our problem then has $K(M+J)$ dimensions, since we must also estimate $K$ multiplying constants. This  should be on the order of $10^2$ for the kinds of problems Phil has in mind.
-	\subsection{Approximation}
-		One way to approach this problem is to use the convexity of the divergence $D$ to generate an upper bound on \eqref{main} and attempt to minimize that. Such an approach might proceed as follows.
-
-		Using convexity, we can write the objective function of \eqref{main} as
-		\begin{align}
-			D[p^x\|q^x] &= D\left[p^x\bigg\|\sum_{i=1}^K\lambda_i(x)q_i\right] \\
-			&\leq \sum_{i=1}^K\lambda_i(x)D\left[p^x\|q_i\right]\;. \label{ub}
-		\end{align}
-		Equation \eqref{ub} has nice interpretation: roughly, a large divergence of $q_i$ from $p^x$ should only concern us if we would expect $q_i$ to be very influential at $x$; i.e. if $\lambda_i(x)$ is large.
-		We can simplify \eqref{ub} further as follows:
-		\begin{align*}
-			\sum_{i=1}^K\lambda_i(x)D\left[p^x\|q_i\right] &= \sum_{i=1}^K\lambda_i(x)\sum_{y \in \mathcal{Y}} p^x(y) \log\frac{p^x(y)}{q_i(y)} \\
-			&= \sum_{i=1}^K\lambda_i(x)\sum_{y \in \mathcal{Y}} \left[ p^x(y) \log p^x(y) + p^x(y) \log \frac{1}{q_i(y)}\right] \\
-			&= \sum_{i=1}^K\lambda_i(x)\sum_{y \in \mathcal{Y}}  p^x(y) \log p^x(y) + \sum_{i=1}^K\lambda_i(x)\sum_{y \in \mathcal{Y}} p^x(y) \log \frac{1}{q_i(y)} \\
-			&= \sum_{i=1}^K\lambda_i(x)H[p^x] + \sum_{i=1}^K\lambda_i(x)\sum_{y \in \mathcal{Y}} p^x(y) \log \frac{1}{q_i(y)} \\
-			&= H[p^x] + \sum_{i=1}^K\lambda_i(x)\sum_{y \in \mathcal{Y}} p^x(y) \log \frac{1}{q_i(y)}\;,
-		\end{align*}
-		where the last equality follows from the fact that $\sum_{i=1}^K \lambda_i(x) = 1$ for all $x\in \mathcal{X}$. The first term depends only on the data, not on the model. We can therefore solve \eqref{ub} by solving the equivalent problem
+		we can define $g_i(\mathbf{q}^i) = - \mathbf{p}^i \cdot \log \mathbf{q}^i$ (the logarithm is evaluated componentwise) and minimize 
 		\begin{equation}
-			\min_{\lambda_i, q_i} - \sum_{x \in \mathcal{X}}\sum_{i=1}^K\sum_{y \in \mathcal{Y}}\lambda_i(x) p^x(y) \log q_i(y)\;.
+			- \sum_{i = 1}^I g_i(\mathbf{q^i})\;.
 		\end{equation}
-
-	\subsection{EM Algorithm}
-		Since this problem appears to be related to clustering tasks, we might reasonably expect that there should be an approach based on the EM algorithm.
-	\subsection{KKT Conditions}
-		We can express our defining problem a bit more explicitly as an optimization problem as follows. As above, we let
+		Then, if we define 
 		\begin{equation}
-			\lambda_i(x) = \frac{c_i\pi(x|\theta_i)}{\sum_ic_i\pi(x|\theta_i)}\;.
-		\end{equation}
-		Furthermore, index the elements of $\mathcal{Y}$ by $j$, so that we can write $q_i(y_j) = q_{ij}$. Similarly, index the elements of $\mathcal{X}$ by $k$, so that we can write $p^{x_k}(y_j) = p_{jk}$. We can then write our main problem as
-		\begin{align}
-			\min_{\lambda_i, q_i} \sum_{x \in \mathcal{X}} D[p^x\|q^x] &= \sum_{x\in \mathcal{X}} H[p^x] + \sum_{x \in \mathcal{X}}p^x(y)\log\frac{1}{q^x(y)}\;,
-		\end{align}
-		so it's equivalent to solve
-		\begin{align}
-			\min_{\lambda_i, q_i}\sum_{x \in \mathcal{X}}\sum_{y \in \mathcal{Y}} p^x(y)\log\frac{1}{q^x(y)} &= \min_{\lambda_i, q_i} - \sum_{x \in \mathcal{X}} \sum_{y \in \mathcal{Y}} p^x(y)\log q^x(y) \\
-			&= \min_{\lambda_i, q_i} - \sum_{x \in \mathcal{X}} \sum_{y \in \mathcal{Y}} p^x(y)\log \left(\sum_{i=1}^K \lambda_i(x) q_i(y)\right) \\
-			&= \min_{c_i, \theta_i, q_i} - \sum_{x \in \mathcal{X}}\sum_{y \in \mathcal{Y}}p^x(y)\log \left(\sum_{i=1}^K \frac{c_i\pi(x|\theta_i)}{\sum_ic_i\pi(x|\theta_i)} q_i(y)\right) \\
-			&= \min_{c_i, \theta_i, q_i} - \sum_{k}\sum_{j}p_{jk}\log \left(\sum_{i} \frac{c_i\pi(x_k|\theta_i)}{\sum_ic_i\pi(x_k|\theta_i)} q_{ij}\right) \\
-			&= \min_{c_i, \theta_i, q_i} - \sum_{k}\sum_{j}p_{jk}\log \left(\sum_{i} c_i\pi(x_k|\theta_i) q_{ij}\right) - \log\left(\sum_ic_i\pi(x_k|\theta_i) \right)
-		\end{align}
-		subject to the constraints $q_{ij} \geq 0$, $\sum_jq_{ij} = 1$ for all $i$, and $c_i \geq 0$.
-
-
-		% \begin{align*}
-		% 	\min_{\lambda_i, q_i} \sum_{x \in \mathcal{X}} D\left[p^x\bigg\|\sum_{i=1}^K \lambda_i(x) q_i\right] &= \min_{c, \theta_i, q_i} \sum_{x \in \mathcal{X}} D\left[p^x\bigg\|\sum_{i=1}^K \frac{c_i\pi(x|\theta_i)}{\sum_ic_i\pi(x|\theta_i)} q_i\right]\\
-		% 	&= \min_{c, \theta_i, q_i} \sum_{x \in \mathcal{X}} \sum_{y \in \mathcal{Y}}  p^x(y) \log\frac{p^x(y)}{\sum_{i=1}^K \frac{c_i\pi(x|\theta_i)}{\sum_ic_i\pi(x|\theta_i)}q_i(y)}
-		% \end{align*}
-	\subsection{KL Divergence Under Logratio Transformation}
-		Logratio transformations are a helpful class of transformations for working with compositional data. In some sense, we are working with the data at point $x$ under two aspects: first, as an empirically-observed distribution that has information-theoretic measures, and second as a data point that happens to have a normalization property. We need to keep these two aspects clearly delineated if we are going to avoid confusion.
-
-		The standard additive logratio transformation of a variable $p = (p_0, \ldots,p_n)$ is
-		\begin{equation}
-			P = L(p) = \left[\ln \frac{p_1}{p_0},\ldots, \ln \frac{p_n}{p_0}\right].
-		\end{equation}
-		In term, we can invert $L$ to write
-		\begin{equation}
-			p = L^{-1}(P) = \mathcal{C}\exp([0,P])\;,
-		\end{equation}
-		where $\mathcal{C}$ is the simplex closure operation given by
-		\begin{equation}
-			\mathcal{C}y = \frac{y}{\sum_i y_i}\;.
-		\end{equation}
-		In this section, we'd like to understand how the divergence between two distributions changes under the logratio transform. The rationale for considering this question is that it may be easier to optimize the divergence in transformed coordinates.
-		We know that
-		\begin{equation}
-			\argmin_{\bar{p}} D[p\|q] = \argmin_{q} \quad - \sum_{i=0}^N p_i \log q_i\;.
-		\end{equation}
-		Writing this out with the decision variables in transformed coordinates, the objective function then becomes
-		\begin{align}
-			- \sum_{i=0}^N p_i \log q_i &= - \sum_{i=0}^N p_i \log \mathcal{C} \exp([0,Q])_i \\
-			&= - \sum_{i=0}^N p_i \log  \exp([0,Q])_i + \sum_{i=0}^N p_i \log \left(1 + \sum_{j = 1}^N e^{\bar{q}_j}\right) \\
-			&= \log \left(1 + \sum_{j = 1}^N e^{Q_j}\right) - \sum_{j=1}^N p_j Q_j \\
-			&= \log (1 + \mathbf{1} \cdot \exp Q) - p\cdot Q\;.
-		\end{align}
-		So, we can minimize this last expression over the unconstrained decision variables $Q$ instead of the compositionally-constrained $q$. We can interpret the first term as a normalizer that punishes us for choosing values of $Q$ that are large in absolute value. Notably, the transformed expression is still convex in $Q$ Furthermore, using Jensen's inequality, we have
-		\begin{equation}
-			\log\left(1 + \sum_{j = 1}^N e^{Q_j}\right) \geq \sum_{j=1}^N Q_j\;,
-		\end{equation}
-		so we can minimize an upper bound by solving
-		\begin{equation}
-			\argmin_{Q} \sum_{i=1}^N(1-p_i)Q_i\;.
-		\end{equation}
-		Our main problem now takes the form
-		\begin{equation}
-			\argmin \sum_{x\in \mathcal{X}} D[p_x\|q_x] = \argmin \sum_{x\in\mathcal{X}} \left[\log \left(1 + \sum_{j = 1}^N e^{Q_j(x)}\right)  - \sum_{j=1}^N p_j Q_j(x)\right]\;.
-		\end{equation}
-		In this formulation, $\bar{q}(x)$ need not satisfy any normalization conditions, so we can express the space of admissible models $Q(x)$ as
-		\begin{equation}
-			Q(x) = \sum_{k = 1}^K \lambda_k(x)Q^k = \sum_{k = 1}^K \lambda(x|\theta_k)Q^k
-		\end{equation}
-		where $Q^k$ is the $k$th `representative distribution' under the model and $\lambda_k(x)$ is the spatial influence function corresponding to $Q^k$. However, $Q_k$ need not be normalized. So, we have the unconstrained problem
-		\begin{align}
-			\argmin_{q} \sum_{x\in \mathcal{X}} D[p_x\|q_x] &= \argmin_{Q,\theta} \sum_{x\in\mathcal{X}} \left[\log \left(1 + \sum_{j = 1}^N e^{\sum_{k = 1}^K \lambda(x|\theta_k)Q_j^k}\right)  - \sum_{i=j}^N p_j \sum_{k = 1}^K \lambda(x|\theta_k)Q_j^k\right] \\
-			&= \argmin_{Q,\theta} \sum_{x\in\mathcal{X}} \left[\log \left(1 + \mathbf{1} \cdot \exp \left\{ \sum_{k=1}^K \lambda(x|\theta_k)Q^k \right\}\right) - p\cdot \sum_{k=1}^K \lambda(x|\theta_k)Q^k \right]
-		\end{align}
-		for $Q^k \in \R^{N}$ and $\theta_k$ in the valid parameter space of the influence function $\lambda$ used.
-
-		In principle, it may be possible to work with this form explicitly and do e.g. a gradient-based method, or maybe simulated annealing if this problem turns out to be nonconvex in the variables.
-
-\section{Notational simplification}
-
-At the $i$th location, the corresponding term of the objective function is 
-\begin{equation}
-	f_i(\mathbf{q}_i) = \mathbf{p}_i \cdot \log \mathbf{q}_i\;, 
-\end{equation}
-where the logarithm is evaluated componentwise. We require that 
-\begin{equation}
-	\mathbf{q}_i = \sum_k \frac{c_k \lambda(x_i|\mathbf{\theta}^k)}{\sum_k c_k \lambda(x_i|\mathbf{\theta}^k)} \mathbf{r}^k\;,
-\end{equation}
-which can be compactly expressed as 
-\begin{equation}
-	\mathbf{q_i} = g_i(\mathbf{R}, \mathbf{\Theta}, \mathbf{c}) = \mathbf{R}  \frac{ \mathbf{c} \bullet \mathbf{\Lambda}(x_i|\mathbf{\Theta}) }{\mathbf{c} \cdot \mathbf{\Lambda}(x_i|\mathbf{\Theta})} 
-\end{equation}
-where 
-\begin{align}
-	\mathbf{\Theta} = \left[\begin{array}{c} \theta^1 \\ \vdots \\ \theta^K \end{array}\right]\;,\quad
-	\mathbf{\Lambda}(x_i|\mathbf{\Theta}) = \left[\begin{array}{c} \vdots \\ \lambda(x_i|\theta^k) \\ \vdots
-	\end{array}\right] \;, \quad
-	\mathbf{R} = \left[\begin{array}{c c c}
-	| & \cdots & | \\  
-	\mathbf{r}^1 & \cdots & \mathbf{r}^k  \\
-	| & \cdots & | \\  \end{array}\right]
-\end{align}
-and $\bullet$ is the Hadamard product. Our problem can therefore be framed as: 
-
-\begin{equation*}
+			h_i(\mathbf{R}, \Theta, \mathbf{c}) \triangleq \mathbf{R} \frac{\mathbf{c} \bullet \Phi(x^i|\Theta)}{\mathbf{c} \cdot \Phi(x^i|\Theta)}\;,
+ 		\end{equation}
+ 		we can write our main optimization problem as 
+ 		\begin{equation}
 	\begin{aligned}
-		& \text{minimize} 
-		& & \sum_i (f_i \circ g_i)(\mathbf{R}, \mathbf{\Theta}, \mathbf{c})   \\
+		& \min_{\mathbf{R}, \Theta, \mathbf{C}} 
+		& & \sum_i (g_i \circ h_i)(\mathbf{R}, \Theta, \mathbf{c})   \\
 		& \text{subject to} 
 		& & \mathbf{c} \geq 0 \\
-		& & & \mathbf{r}^k \in \mathcal{P}^Y \quad \forall k 
-	\end{aligned}
-	\end{equation*}
-and possible additional constraints on $\mathbf{\Theta}$ depending on the choice of $\lambda$. For example, for $\lambda$ the density of a bivariate normal, we would require the elements of $\theta^k$ corresponding to the covariance matrix to be symmetric and positive-definite. 
-We can now proceed to compute gradients. We have 
-\begin{align*}
-	\nabla f_i (\mathbf{q}_i) = p_i \bullet q_i^{*}\;,
-\end{align*}
-where $q_i^{*}$ is the vector whose $j$th component is the reciprocal of the $j$th component of $q$. Furthermore, the components of $\nabla g_i$ are
-\begin{align}
-	\frac{\partial g(\mathbf{R}, \mathbf{\Theta}, \mathbf{c})}{\partial c^k} &= \mathbf{R}\frac{(\mathbf{c} \cdot \mathbf{\Lambda}(x_i|\mathbf{\Theta}))\mathbf{e}_k \bullet \mathbf{\Lambda}(x_i|\mathbf{\Theta}) - (\mathbf{e}_k \cdot \mathbf{\Lambda}(x_i|\mathbf{\Theta})) \mathbf{c} \bullet \mathbf{\Lambda}(x_i|\mathbf{\Theta})}{(\mathbf{c} \cdot \mathbf{\Lambda}(x_i|\mathbf{\Theta}))^2} \\
-	&= \mathbf{R}\frac{\left[\mathbf{\Lambda}(x_i|\mathbf{\Theta}) \cdot (\mathbf{c} - \mathbf{e}_k)\right]   \left[(\mathbf{e_k - \mathbf{c}}) \bullet \mathbf{\Lambda}(x_i|\mathbf{\Theta})\right]}{(\mathbf{c} \cdot \mathbf{\Lambda}(x_i|\mathbf{\Theta}))^2} \\
-	\frac{\partial g(\mathbf{R}, \mathbf{\Theta}, \mathbf{c})}{\partial r^k_j} &=  \frac{ \mathbf{e}_k \cdot [\mathbf{c} \bullet \mathbf{\Lambda}(x_i|\mathbf{\Theta})] }{\mathbf{c} \cdot \mathbf{\Lambda}(x_i|\mathbf{\Theta})} \\
-	\frac{\partial g(\mathbf{R}, \mathbf{\Theta}, \mathbf{c})}{\partial \theta^k_l} &= \mathbf{R} \frac{[\mathbf{e}_k \bullet \mathbf{c}] \frac{\partial \lambda(x_i|\theta^k)}{ \partial \theta^k_\ell}\mathbf{c} \cdot \mathbf{\Lambda}(x_i|\mathbf{\Theta}) - \mathbf{e}_k \cdot \mathbf{c} \frac{\partial \lambda(x_i |\theta^k)}{\partial \theta^k_\ell} \mathbf{c} \bullet \mathbf{\Lambda}(x_i|\mathbf{\Theta})}{(\mathbf{c} \cdot \mathbf{\Lambda}(x_i|\mathbf{\Theta}))^2} \\
-	&= \mathbf{R} \frac{\mathbf{c} \bullet \left[ (\mathbf{c} \cdot \mathbf{\Lambda}(x_i|\mathbf{\Theta})) \mathbf{e}_k - (\mathbf{e}_k \cdot \mathbf{c})\mathbf{\Lambda}(x_i|\mathbf{\Theta}) \right]}{(\mathbf{c} \cdot \mathbf{\Lambda}(x_i|\mathbf{\Theta}))^2} \frac{\partial \lambda(x_i|\theta^k)}{ \partial \theta^k_\ell}\;.
-\end{align}
-The exact manner in which these gradients are organized depends on the formulation, but ultimately it's just a matter of re-ordering where needed. 
+		& & & \mathbf{r}^k \in \mathcal{S}^J \quad \forall k \;.
+	\end{aligned} \label{opt}
+	\end{equation}
+	The problem \eqref{opt} has the following properties:  
+	\begin{enumerate}
+		\item The feasible region is convex. 
+		\item The objective function is likely nonconvex.
+		\item The objective function is smooth. 
+	\end{enumerate}
+	Thus, finding a local optimum would likely be easy with simple first- or second-order methods, but finding a global optimum could be nontrivial. 
+\section{Open Questions}
+	\begin{itemize}
+		\item Is \eqref{opt} convex up to permutations of the indices $k = 1,\ldots,K$? This would imply that the only local optima are $K!$ global optima, which are identical up to relabeling the parameters. 
+		\item How much ``signal'' should we expect in a standard data set? 
+		\item How nearly-optimal are local minima? How bad would it be to ``settle'' for a local optimum?
+	\end{itemize}
+	
 
 
 
 
-\section{Helpful Citations}
+
+
+
+
+% We can now proceed to compute gradients. We have 
+% \begin{align*}
+% 	\nabla f_i (\mathbf{q}_i) = p_i \bullet q_i^{*}\;,
+% \end{align*}
+% where $q_i^{*}$ is the vector whose $j$th component is the reciprocal of the $j$th component of $q$. Furthermore, the components of $\nabla g_i$ are
+% \begin{align}
+% 	\frac{\partial g(\mathbf{R}, \mathbf{\Theta}, \mathbf{c})}{\partial c^k} &= \mathbf{R}\frac{(\mathbf{c} \cdot \mathbf{\Lambda}(x_i|\mathbf{\Theta}))\mathbf{e}_k \bullet \mathbf{\Lambda}(x_i|\mathbf{\Theta}) - (\mathbf{e}_k \cdot \mathbf{\Lambda}(x_i|\mathbf{\Theta})) \mathbf{c} \bullet \mathbf{\Lambda}(x_i|\mathbf{\Theta})}{(\mathbf{c} \cdot \mathbf{\Lambda}(x_i|\mathbf{\Theta}))^2} \\
+% 	&= \mathbf{R}\frac{\left[\mathbf{\Lambda}(x_i|\mathbf{\Theta}) \cdot (\mathbf{c} - \mathbf{e}_k)\right]   \left[(\mathbf{e_k - \mathbf{c}}) \bullet \mathbf{\Lambda}(x_i|\mathbf{\Theta})\right]}{(\mathbf{c} \cdot \mathbf{\Lambda}(x_i|\mathbf{\Theta}))^2} \\
+% 	\frac{\partial g(\mathbf{R}, \mathbf{\Theta}, \mathbf{c})}{\partial r^k_j} &=  \frac{ \mathbf{e}_k \cdot [\mathbf{c} \bullet \mathbf{\Lambda}(x_i|\mathbf{\Theta})] }{\mathbf{c} \cdot \mathbf{\Lambda}(x_i|\mathbf{\Theta})} \\
+% 	\frac{\partial g(\mathbf{R}, \mathbf{\Theta}, \mathbf{c})}{\partial \theta^k_l} &= \mathbf{R} \frac{[\mathbf{e}_k \bullet \mathbf{c}] \frac{\partial \lambda(x_i|\theta^k)}{ \partial \theta^k_\ell}\mathbf{c} \cdot \mathbf{\Lambda}(x_i|\mathbf{\Theta}) - \mathbf{e}_k \cdot \mathbf{c} \frac{\partial \lambda(x_i |\theta^k)}{\partial \theta^k_\ell} \mathbf{c} \bullet \mathbf{\Lambda}(x_i|\mathbf{\Theta})}{(\mathbf{c} \cdot \mathbf{\Lambda}(x_i|\mathbf{\Theta}))^2} \\
+% 	&= \mathbf{R} \frac{\mathbf{c} \bullet \left[ (\mathbf{c} \cdot \mathbf{\Lambda}(x_i|\mathbf{\Theta})) \mathbf{e}_k - (\mathbf{e}_k \cdot \mathbf{c})\mathbf{\Lambda}(x_i|\mathbf{\Theta}) \right]}{(\mathbf{c} \cdot \mathbf{\Lambda}(x_i|\mathbf{\Theta}))^2} \frac{\partial \lambda(x_i|\theta^k)}{ \partial \theta^k_\ell}\;.
+% \end{align}
+% The exact manner in which these gradients are organized depends on the formulation, but ultimately it's just a matter of re-ordering where needed. 
+
+
+
+
+% \section{Helpful Citations}
 \end{document}
