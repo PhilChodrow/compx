@@ -7,7 +7,7 @@
 *.fdb_latexmk
 *.csv
 *.html
-*.pdf
+*.aux
 *.Rproj
 *.Rbuildignore
 

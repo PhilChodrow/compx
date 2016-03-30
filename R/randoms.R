@@ -11,9 +11,13 @@ NULL
 #' @param J the number of categories
 #' @export
 
-random_params <- function(n, K, J){
-	Q     <- random_distributions(K, J) #
-	Mu    <- lapply(rep(1,K), function(x) runif(n))
+random_params <- function(dims){
+	J <- dims$J
+	K <- dims$K
+	n <- dims$n
+
+	Q     <- random_representatives(dims) #
+	Mu    <- lapply(rep(1,K), function(x) runif(n, -5, 5))
 	Sigma <- lapply(rep(1,K), function(x) random_PD_matrix(n))
 	C     <- c(abs(rnorm(K))) # weight vector
 	return(list(Q = Q, Mu = Mu, Sigma = Sigma, C = C))
@@ -41,13 +45,31 @@ random_PD_matrix <- function (n, ev = runif(n, 1, 10))
 
 
 
+#' Make a matrix whose columns are random valid probability distributions
+#' @param I the number of distributions (columns)
+#' @param J the number of bins (rows)
+#' @export
+
+random_representatives <- function(dims){
+	K <- dims$K
+	J <- dims$J
+	rep(1, K) %>%
+		lapply(FUN = function(x) runif(J, 1, 100) %>% simplex_normalize()) %>%
+		do.call(cbind, .)
+
+}
+
+
 
 #' Make a matrix whose columns are random valid probability distributions
 #' @param I the number of distributions (columns)
 #' @param J the number of bins (rows)
 #' @export
 
-random_distributions <- function(I, J){
+random_distributions <- function(dims){
+	I <- dims$I
+	J <- dims$J
+
 	rep(1, I) %>%
 		lapply(FUN = function(x) runif(J, 1, 100) %>% simplex_normalize()) %>%
 		do.call(cbind, .)
@@ -59,8 +81,10 @@ random_distributions <- function(I, J){
 #' @param I the number of locations to generate
 #' @export
 
-random_locs <- function(n, I){
-	X <- lapply(rep(1,I), function(x) runif(n))
+random_locs <- function(dims){
+	n <- dims$n
+	I <- dims$I
+	X <- lapply(rep(1,I), function(x) runif(n, -1, 1))
 	X
 }
 
@@ -71,6 +95,6 @@ random_locs <- function(n, I){
 #' @return data a list of [1] locations and [2] corresponding distributions
 #' @export
 
-random_data <- function(n, I, J){
-	list(X = random_locs(n, I), P = random_distributions(I,J))
+random_data <- function(dims){
+	list(X = random_locs(dims), P = random_distributions(dims))
 }

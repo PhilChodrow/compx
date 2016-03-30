@@ -11,7 +11,7 @@ NULL
 #' @export
 
 UT_unravel <- function(M){
-	if(!isSymmetric(M)){
+	if(!all.equal(M, t(M))){
 		warning("Warning: matrix M is not symmetric, information lost")
 	}
 	M[lower.tri(t(M), diag = TRUE)]
@@ -49,10 +49,11 @@ UT_ravel <- function(v){
 #' @param C vector the vector of scale coefficients
 #' @return M a matrix
 #' @export
-to_matrix <- function(Q, Mu, Sigma, C){
-	mu <- do.call(cbind, Mu)
-	sigma <- do.call(cbind, lapply(Sigma, UT_unravel))
-	rbind(Q, mu, sigma, C)
+to_matrix <- function(pars){
+	mu <- do.call(cbind, pars$Mu)
+	sigma <- lapply(pars$Sigma, square_root)
+	sigma <- do.call(cbind, lapply(sigma, UT_unravel))
+	rbind(pars$Q, mu, sigma, pars$C)
 }
 
 #' Convert a matrix to a list of params
@@ -61,13 +62,16 @@ to_matrix <- function(Q, Mu, Sigma, C){
 #' @param J the number of buckets
 #' @return param a list of parameters
 #' @export
-from_matrix <- function(M, n, J){
+from_matrix <- function(M, dims){
+	J <- dims$J
+	n <- dims$n
+
 	Q <- M[1:J,]
 	Mu <- M[(J+1):(J+n),] %>% split(col(.))
 	Sigma <- M[(J + n + 1):(J + n + n*(n+1)/2),] %>%
 		plyr::alply(.margins = 2, .fun = UT_ravel)
+	Sigma <- lapply(Sigma, function(S) S %*% S)
 	C <- M[nrow(M),]
-
 	list(Q = Q, Mu = Mu, Sigma = Sigma, C = C)
 }
 
@@ -79,8 +83,8 @@ from_matrix <- function(M, n, J){
 #' @return v a vector
 #' @export
 
-to_vector <- function(Q, Mu, Sigma, C){
-	to_matrix(Q = Q, Mu = Mu, Sigma = Sigma, C = C) %>%
+to_vector <- function(pars){
+	to_matrix(pars) %>%
 		as.vector()
 }
 
@@ -90,9 +94,60 @@ to_vector <- function(Q, Mu, Sigma, C){
 #' @param J the number of buckets
 #' @return param a list of parameters
 #' @export
-from_vector <- function(V, n, J, K){
+
+from_vector <- function(V, dims){
+	n <- dims$n
+	J <- dims$J
+	K <- dims$K
 	n_rows <- J + n + n*(n+1)/2 + 1
 	matrix(V, n_rows, K) %>%
-		from_matrix(n = n, J = J)
+		from_matrix(dims)
 }
 
+#' Compute a symmetric square root of a positive-definite, symmetric matrix
+#' @param A the matrix to factor
+#' @return B a symmetric square root of A
+#' @export
+square_root <- function(A){
+	e <- eigen(A)
+	V <- e$vectors
+	V %*% diag(sqrt(e$values)) %*% t(V)
+}
+
+
+#' Create the objective function for subsequent optimization
+#' @param matrix P the matrix of true distributions
+#' @export
+
+make_objective <- function(data){
+	objective <- function(pars){
+		ests <- estimate(data, pars)
+		total_DKL(data$P, ests)
+	}
+	objective
+}
+
+
+#' Consider doing this with a single overall function that returns a list of functions that will then serve as the objective and constraints.
+
+#' Create the objective and constraints for the problem
+#' @export
+make_problem <- function(data, dims){
+	m_objective <- make_objective(data) # matrix objective
+
+	objective <- function(V){
+		pars <- from_vector(V, dims)
+		m_objective(pars)
+	}
+
+	heq <- function(V){
+		pars <- from_vector(V = V, dims)
+		colSums(pars$Q) - 1
+	}
+
+	hin <- function(V){
+		pars <- from_vector(V = V, dims)
+		rbind(pars$Q, pars$C) %>% as.numeric()
+	}
+	list(objective = objective, heq = heq, hin = hin)
+}

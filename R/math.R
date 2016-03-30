@@ -13,7 +13,8 @@ NULL
 
 DKL <- function(p,q){
 	if(!simplex_check(p) | !simplex_check(q)){
-		stop('p or q are not on the simplex; try simplex_normalize(p)')
+		message <- paste0('p or q are not on the simplex: sum(p) = ', sum(p), ' and sum(q) = ', sum(q))
+		warning(message)
 	}
 	if(length(p) != length(q)){
 		stop('Distribution alphabets are different size')
@@ -29,7 +30,7 @@ DKL <- function(p,q){
 
 simplex_check <- function(p, allow_zero = TRUE){
 	nonneg <- ifelse(allow_zero, min(p >= 0), min(p > 0))
-	normed <- abs(sum(p) - 1) < .00000001 # numerical tolerance
+	normed <- abs(sum(p) - 1) < .1 # numerical tolerance
 	nonneg & normed
 }
 
@@ -52,15 +53,12 @@ grad_f <- function(p,q){
 #' @return a vector of densities at x corresponding to the different densities
 #' @export
 
-normal_vec <- function(x, Mu, Sigma){
-#
-# 	mapply(mvtnorm::dmvnorm, x = x, mean = Mu, sigma = Sigma)
-#
+normal_vec <- function(x, pars){
+
 	f <- function(Mu, Sigma){
 		mvtnorm::dmvnorm(x, Mu, Sigma)
 	}
-	mapply(f, Mu, Sigma)
-
+	mapply(f, pars$Mu, pars$Sigma)
 }
 
 #' Find the spatially-structured estimate at a location x
@@ -71,10 +69,10 @@ normal_vec <- function(x, Mu, Sigma){
 #' @param C vector the vector of scale coefficients
 #' @return vector the estimates at x
 
-single_estimate <- function(x, Q, Mu, Sigma, C = 1){
-	densities <- normal_vec(x, Mu, Sigma)
-	vec <- C * densities / C %*% densities
-	Q %*% vec
+single_estimate <- function(x, pars){
+	densities <- normal_vec(x, pars)
+	vec <- pars$C * densities / pars$C %*% densities
+	pars$Q %*% vec
 }
 
 #' Find the spatially-structured estimate at multiple locations X
@@ -86,8 +84,8 @@ single_estimate <- function(x, Q, Mu, Sigma, C = 1){
 #' @return vector the estimates at x
 #' @export
 
-estimate <- function(X, Q, Mu, Sigma, C = 1){
-	ests <- lapply(X, FUN = single_estimate, Q = Q, Mu = Mu, Sigma = Sigma, C = C) %>%
+estimate <- function(data, pars){
+	ests <- lapply(data$X, FUN = single_estimate, pars) %>%
 		do.call(cbind, .)
 	return(ests)
 }
@@ -120,14 +118,4 @@ total_DKL <- function(P, Q){
 		sum
 }
 
-#' Create the objective function for subsequent optimization
-#' @param matrix P the matrix of true distributions
-#' @export
 
-make_objective <- function(P, X){
-	objective <- function(Q, Mu, Sigma, C){
-		ests <- estimate(X = X, Q = Q, Mu = Mu, Sigma = Sigma, C = C)
-		total_DKL(P, ests)
-	}
-	objective
-}
