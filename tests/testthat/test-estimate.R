@@ -19,11 +19,10 @@ test_that("With one representative function, all estimates are equal", {
 	data <- random_data(dims)
 	pars <- random_params(dims)
 
-	est <- estimate(data, pars)
+	est <- est(data, pars)
 
-	compare <- do.call(cbind, replicate(I, pars$Q, simplify = FALSE))
+	compare <- do.call(rbind, replicate(I, pars$Q, simplify = FALSE))
 	expect_equal(est, compare)
-
 })
 
 test_that("With multiple rep. functions, all results are valid",{
@@ -33,7 +32,7 @@ test_that("With multiple rep. functions, all results are valid",{
 	data <- random_data(dims)
 	pars <- random_params(dims)
 
-	ests <- estimate(data, pars)
-	expect_equal(min(apply(ests, MARGIN = 2, simplex_check)), 1)
+	ests <- est(data, pars)
+	expect_equal(min(apply(ests, MARGIN = 1, simplex_check)), 1)
 })
 

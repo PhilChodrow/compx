@@ -22,7 +22,7 @@ NULL
 #' @export
 
 get_census_data <- function(states, counties, table_num, end_year=2012, span=5){
-	library(acs)
+	library(acs, warn.conflicts = FALSE)
 		data <- acs::acs.fetch(endyear = end_year,
 						   span = span,
 						   geography = acs::geo.make(state = states, county = counties, tract = '*', block.group = '*'),
@@ -52,6 +52,7 @@ get_census_data <- function(states, counties, table_num, end_year=2012, span=5){
 get_centroids <- function(data){
 	centroids <- rgeos::gCentroid(data,byid=TRUE)
 	centroids <- centroids@coords
+	colnames(centroids) <- c('lon', 'lat')
 	return(centroids)
 }
 
@@ -62,13 +63,34 @@ get_centroids <- function(data){
 
 get_table <- function(data){
 	exclude <- c('GEOID', 'AWATER', 'COUNTYFP', 'TRACTCE', 'BLKGRPCE', 'AFFGEOID', 'NAME', 'LSAD', 'ALAND','NAME.1', 'state', 'county', 'tract', 'blockgroup', 'GEOID.1', 'STATEFP')
-	tab <- data@data %>%
-		mutate(ID = row.names(data)) %>%
-		tbl_df
+	tab <- data@data
 	tab <- tab[,(!names(tab) %in% exclude)]
-	tab <- tab[,!(grepl('Total', names(tab)))] %>%
-		select(ID, everything())
+	tab <- tab[,!(grepl('Total', names(tab)))]
 	return(tab)
+}
+
+#' @export
+format_data <- function(acs_data){
+	P <- acs_data %>%
+		get_table() %>%
+		as.matrix()
+	P <- P + 1 # FUDGE FOR DEALING WITH ZERO ENTRIES
+	P <- P %>%
+		t %>%
+		scale(., center=FALSE, scale = colSums(.)) %>%
+		t %>%
+		na.omit
+	X <- get_centroids(acs_data)
+	X <- X[row.names(P),]
+	data <- list(X = X, P = P)
+}
+
+#' @export
+get_dims <- function(data, K){
+	n <- ncol(data$X)
+	I <- nrow(data$P)
+	J <- ncol(data$P)
+	list(n = n, I = I, J = J, K = K)
 }
 
 

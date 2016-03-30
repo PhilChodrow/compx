@@ -15,13 +15,13 @@ dims <- list(n = n, I = I, J = J, K = K)
 test_that("Random compositional data lies on simplex", {
 	P <- random_distributions(dims)
 
-	expect_equal(min(apply(P, MARGIN = 2, simplex_check)), 1)
+	expect_equal(min(apply(P, MARGIN = 1, simplex_check)), 1)
 })
 
 test_that('Random data generator gives as many locs as distributions',{
 
 	data <- random_data(dims)
-	expect_equal(length(data$X), dim(data$P)[2])
+	expect_equal(dim(data$X)[1], dim(data$P)[1])
 })
 
 test_that('Random PD matrix generator does indeed return a PD matrix',{
@@ -33,6 +33,7 @@ test_that('Random PD matrix generator does indeed return a PD matrix',{
 
 test_that('Random param generator gives valid params',{
 
+
 	pars <- random_params(dims)
 	Q <- pars$Q
 	Mu <- pars$Mu
@@ -40,7 +41,7 @@ test_that('Random param generator gives valid params',{
 	C <- pars$C
 	expect_equal(length(C), K)
 	expect_equal(length(Sigma), K)
-	expect_equal(all.equal(dim(Q), c(J, K)), TRUE)
+	expect_equal(all.equal(dim(Q), c(K, J)), TRUE)
 	expect_equal(length(Mu), K)
 	expect_equal(unlist(lapply(Mu, length)), rep(n, K))
 

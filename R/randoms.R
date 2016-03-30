@@ -55,7 +55,7 @@ random_representatives <- function(dims){
 	J <- dims$J
 	rep(1, K) %>%
 		lapply(FUN = function(x) runif(J, 1, 100) %>% simplex_normalize()) %>%
-		do.call(cbind, .)
+		do.call(rbind, .)
 
 }
 
@@ -72,7 +72,7 @@ random_distributions <- function(dims){
 
 	rep(1, I) %>%
 		lapply(FUN = function(x) runif(J, 1, 100) %>% simplex_normalize()) %>%
-		do.call(cbind, .)
+		do.call(rbind, .)
 
 }
 
@@ -84,7 +84,7 @@ random_distributions <- function(dims){
 random_locs <- function(dims){
 	n <- dims$n
 	I <- dims$I
-	X <- lapply(rep(1,I), function(x) runif(n, -1, 1))
+	X <- matrix(runif(n*I, -1, 1), I, n)
 	X
 }
 

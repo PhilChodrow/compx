@@ -50,10 +50,10 @@ UT_ravel <- function(v){
 #' @return M a matrix
 #' @export
 to_matrix <- function(pars){
-	mu <- do.call(cbind, pars$Mu)
+	mu <- do.call(rbind, pars$Mu)
 	sigma <- lapply(pars$Sigma, square_root)
-	sigma <- do.call(cbind, lapply(sigma, UT_unravel))
-	rbind(pars$Q, mu, sigma, pars$C)
+	sigma <- do.call(rbind, lapply(sigma, UT_unravel))
+	cbind(pars$Q, mu, sigma, pars$C)
 }
 
 #' Convert a matrix to a list of params
@@ -66,12 +66,12 @@ from_matrix <- function(M, dims){
 	J <- dims$J
 	n <- dims$n
 
-	Q <- M[1:J,]
-	Mu <- M[(J+1):(J+n),] %>% split(col(.))
-	Sigma <- M[(J + n + 1):(J + n + n*(n+1)/2),] %>%
-		plyr::alply(.margins = 2, .fun = UT_ravel)
+	Q <- M[,1:J]
+	Mu <- M[,(J+1):(J+n)] %>% split(row(.))
+	Sigma <- M[,(J + n + 1):(J + n + n*(n+1)/2)] %>%
+		plyr::alply(.margins = 1, .fun = UT_ravel)
 	Sigma <- lapply(Sigma, function(S) S %*% S)
-	C <- M[nrow(M),]
+	C <- M[,ncol(M)]
 	list(Q = Q, Mu = Mu, Sigma = Sigma, C = C)
 }
 
@@ -99,8 +99,8 @@ from_vector <- function(V, dims){
 	n <- dims$n
 	J <- dims$J
 	K <- dims$K
-	n_rows <- J + n + n*(n+1)/2 + 1
-	matrix(V, n_rows, K) %>%
+	n_cols <- J + n + n*(n+1)/2 + 1
+	matrix(V, K, n_cols) %>%
 		from_matrix(dims)
 }
 
@@ -119,10 +119,11 @@ square_root <- function(A){
 #' @param matrix P the matrix of true distributions
 #' @export
 
-make_objective <- function(data){
+make_objective <- function(data, obj_fun){
 	objective <- function(pars){
-		ests <- estimate(data, pars)
-		total_DKL(data$P, ests)
+		total_obj <- total_obj_constructor(fun = obj_fun)
+		ests <- est(data, pars)
+		total_obj(data$P, ests)
 	}
 	objective
 }
@@ -132,8 +133,8 @@ make_objective <- function(data){
 
 #' Create the objective and constraints for the problem
 #' @export
-make_problem <- function(data, dims){
-	m_objective <- make_objective(data) # matrix objective
+make_problem <- function(data, dims, obj_fun){
+	m_objective <- make_objective(data, obj_fun) # matrix objective
 
 	objective <- function(V){
 		pars <- from_vector(V, dims)
@@ -142,12 +143,12 @@ make_problem <- function(data, dims){
 
 	heq <- function(V){
 		pars <- from_vector(V = V, dims)
-		colSums(pars$Q) - 1
+		rowSums(pars$Q) - 1
 	}
 
 	hin <- function(V){
 		pars <- from_vector(V = V, dims)
-		rbind(pars$Q, pars$C) %>% as.numeric()
+		cbind(pars$Q, pars$C) %>% as.numeric()
 	}
 	list(objective = objective, heq = heq, hin = hin)
 }

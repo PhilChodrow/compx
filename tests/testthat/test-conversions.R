@@ -1,8 +1,6 @@
 library(compx)
 
-
 context("Argument conversions")
-
 
 n <- sample(5:10, 1)
 I <- sample(4:10, 1)

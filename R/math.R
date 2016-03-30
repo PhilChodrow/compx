@@ -5,22 +5,6 @@
 
 NULL
 
-#' Find the Kullback-Leibler divergence of two empirical distributions.
-#' @param p the 'true' distribution
-#' @param q the estimated distribution
-#' @return numeric the KL divergence between p and q
-#' @export
-
-DKL <- function(p,q){
-	if(!simplex_check(p) | !simplex_check(q)){
-		message <- paste0('p or q are not on the simplex: sum(p) = ', sum(p), ' and sum(q) = ', sum(q))
-		warning(message)
-	}
-	if(length(p) != length(q)){
-		stop('Distribution alphabets are different size')
-		}
-	return(as.numeric(p %*% log(p/q)))
-}
 
 #' Check whether a vector is an element of the probability simplex
 #' @param p vector the vector to check
@@ -72,11 +56,11 @@ normal_vec <- function(x, pars){
 single_estimate <- function(x, pars){
 	densities <- normal_vec(x, pars)
 	vec <- pars$C * densities / pars$C %*% densities
-	pars$Q %*% vec
+	vec %*% pars$Q
 }
 
 #' Find the spatially-structured estimate at multiple locations X
-#' @param X list of location vectors
+#' @param X matrix of location vectors
 #' @param Q matrix the matrix of representative distributions
 #' @param Mu list a list of means
 #' @param Sigma list a list of covariance matrices
@@ -84,9 +68,10 @@ single_estimate <- function(x, pars){
 #' @return vector the estimates at x
 #' @export
 
-estimate <- function(data, pars){
-	ests <- lapply(data$X, FUN = single_estimate, pars) %>%
-		do.call(cbind, .)
+est <- function(data, pars){
+	X <- data$X %>% split(., 1:NROW(.))
+	ests <- lapply(X, FUN = single_estimate, pars) %>%
+		do.call(rbind, .)
 	return(ests)
 }
 
@@ -105,17 +90,55 @@ simplex_normalize <- function(p){
 	normed
 }
 
-#' Compute the total KL divergence between a set of estimates and the data
+
+
+#' Find the Kullback-Leibler divergence of two empirical distributions.
+#' @param p the 'true' distribution
+#' @param q the estimated distribution
+#' @return numeric the KL divergence between p and q
+#' @export
+
+DKL <- function(p,q){
+	# if(!simplex_check(p) | !simplex_check(q)){
+	# 	message <- paste0('p or q are not on the simplex: sum(p) = ', sum(p), ' and sum(q) = ', sum(q))
+	# 	warning(message)
+	# }
+	if(length(p) != length(q)){
+		stop('Distribution alphabets are different size')
+	}
+	return(as.numeric(p %*% log(p/q)))
+}
+
+#' Compute the total objective value between two matrices
 #' @param matrix P a matrix in which each column is a distribution
 #' @param matrix Q a matrix of estimates
 #' @return numeric div the total divergence of the columns of Q from the columns of P
 #' @export
 
-total_DKL <- function(P, Q){
-	1:dim(P)[2] %>%
-		matrix %>%
-		apply(1, function(i) DKL(P[,i], Q[,i])) %>%
-		sum
+total_obj_constructor <- function(fun = DKL){
+	total_obj <- function(P,Q){
+		1:dim(P)[1] %>%
+			matrix %>%
+			apply(1, function(i) fun(P[i,], Q[i,])) %>%
+			sum
+	}
 }
+
+#' Compute the sum of squares distance between two probability distributions
+#' @param p
+#' @param q
+#' return numeric the distance
+#' @export
+
+sum_of_squares <- function(p,q){
+	if(length(p) != length(q)){
+		stop('Distribution alphabets are different size')
+	}
+	(p - q)^2 %>% sum
+}
+
+
+
+
 
 
