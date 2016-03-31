@@ -25,22 +25,36 @@ test_that("Divergence warns on nonnormalized vectors",{
 	expect_warning(DKL(p = c(1,1), q = c(1,1)))
 })
 
-test_that('Total DKL between equal matrices is zero',{
+test_that("Divergence works if p has zeros",{
+	p <- runif(10, 0,1)
+	p[1] <- 0
+	p <- p / sum(p)
 
-	expect_equal(total_DKL(pars$Q, pars$Q), 0)
+	q <- runif(10, 0, 1)
+	q <- q/sum(q)
+
+	expect_true(!is.na(DKL(p,q)))
+	expect_true(is.infinite(DKL(q,p)))
+})
+
+test_that("Entropy is divergence from uniform",{
+	p <- runif(10, 0,1)
+	p <- p / sum(p)
+	u <- rep(1/length(p), length(p))
+	expect_equal(H(p), log(length(p)) - DKL(p,u))
 })
 
 test_that('Objective function returns a nonnegative scalar', {
 
 	# generate random data and params, and place them in the namespace
 
-	objective <- make_objective(data)
+	objective <- make_objective(data,obj_fun = DKL)
 	expect_true(objective(pars) > 0)
 })
 
 test_that('Problem construction is conformable',{
 	v <- to_vector(pars)
-	problem <- make_problem(data, dims)
+	problem <- make_problem(data, dims, obj_fun = DKL)
 	expect_true(problem$objective(v) > 0)
 	expect_true(min(problem$heq(v) == 0) == 1)
 	expect_true(min(problem$hin(v) > 0) == 1)

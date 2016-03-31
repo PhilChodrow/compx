@@ -74,7 +74,6 @@ format_data <- function(acs_data){
 	P <- acs_data %>%
 		get_table() %>%
 		as.matrix()
-	P <- P + 1 # FUDGE FOR DEALING WITH ZERO ENTRIES
 	P <- P %>%
 		t %>%
 		scale(., center=FALSE, scale = colSums(.)) %>%
