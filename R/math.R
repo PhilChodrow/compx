@@ -1,10 +1,13 @@
 #' math
 #' @name math
 #' @docType package
-#' @import dplyr mvtnorm matrixcalc
+#' @import dplyr mvtnorm matrixcalc numDeriv magic
 
 NULL
 
+# -----------------------------------------------------------------------------
+# INFORMATION GEOMETRY
+# -----------------------------------------------------------------------------
 
 #' Check whether a vector is an element of the probability simplex
 #' @param p vector the vector to check
@@ -16,69 +19,6 @@ simplex_check <- function(p, allow_zero = TRUE){
 	nonneg <- ifelse(allow_zero, min(p >= 0), min(p > 0))
 	normed <- abs(sum(p) - 1) < .1 # numerical tolerance
 	nonneg & normed
-}
-
-
-#' Find the gradient of the part of the Kullback-Leibler divergence that depends on f
-#' @param p the 'true' distribution
-#' @param q the estimated distribution
-#' @return p dot log(q)
-#' @export
-
-grad_f <- function(p,q){
-	return( - p %*% log(q))
-}
-
-
-#' Compute a vector of values of different normal densities at a point x
-#' @param x vector the location
-#' @param Mu a list of means
-#' @param Sigma a list of covariance matrices
-#' @return a vector of densities at x corresponding to the different densities
-#' @export
-
-normal_vec <- function(x, pars){
-
-	f <- function(Mu, Sigma){
-		mvtnorm::dmvnorm(x, Mu, Sigma)
-	}
-	mapply(f, pars$Mu, pars$Sigma)
-}
-
-#' Spatial influence function
-#' @param x
-#' @param pars
-#' @export
-
-spatial_influence_constructor <- function(pars){
-	single <- function(x){
-		densities <- normal_vec(x, pars)
-		pars$C * densities / as.numeric(pars$C %*% densities)
-	}
-	influence <- function(X){
-		out <- apply(X, MARGIN = 1, FUN = single)
-		if(dim(pars$Q)[1] == 1){
-			return(out %>% as.matrix)
-		}
-		return(out %>% t)
-	}
-	return(influence)
-}
-
-
-#' Find the spatially-structured estimate at multiple locations X
-#' @param X matrix of location vectors
-#' @param Q matrix the matrix of representative distributions
-#' @param Mu list a list of means
-#' @param Sigma list a list of covariance matrices
-#' @param C vector the vector of scale coefficients
-#' @return vector the estimates at x
-#' @export
-
-est <- function(data, pars){
-	spatial_influence <- spatial_influence_constructor(pars)
-	spatial <- spatial_influence(data$X)
-	return(spatial %*% pars$Q)
 }
 
 #' Normalize a nonnegative vector so that it lies in the probability simplex
@@ -95,8 +35,6 @@ simplex_normalize <- function(p){
 	}
 	normed
 }
-
-
 
 #' Find the Kullback-Leibler divergence of two empirical distributions.
 #' @param p the 'true' distribution
@@ -121,39 +59,245 @@ DKL <- function(p,q){
 	return(as.numeric(p %*% log(p/q)))
 }
 
-#' Compute the total objective value between two matrices
-#' @param matrix P a matrix in which each column is a distribution
-#' @param matrix Q a matrix of estimates
-#' @return numeric div the total divergence of the columns of Q from the columns of P
+#' Find the entropy of a distribution
 #' @export
 
-total_obj_constructor <- function(fun = DKL){
-	total_obj <- function(P,Q){
+H <- function(p){
+	if(!simplex_check(p)){
+		message <- paste0('p is not on the simplex: sum(p) = ', sum(p))
+		warning(message)
+	}
+	as.numeric(- p %*% log(p))
+}
+
+
+# -----------------------------------------------------------------------------
+# SPATIAL RESPONSIBILITY FUNCTIONS
+# -----------------------------------------------------------------------------
+
+#' Compute the gradient of the squaring operation with respect to matrix entries
+#' Currently calculated numerically.
+#' @param sig the matrix at which to evaluate the gradient
+#' @return vector of derivatives, in row-wise, upper-triangular order.
+#' @export
+
+square_grad <- function(sig){
+	f <- function(sig){
+		X <- sig %>% UT_ravel()
+		X %*% X %>% UT_unravel() # X is itself symmetric
+	}
+	jacobian(func = f, x = sig)
+}
+
+#' Compute the value of a normal distribution at point x with parameters v
+#' v must have length n*(n+3)/2, where n is the length of x
+#' @param x the location at which to evaluate the normal density
+#' @param v the vector of parameters, in format c(mu, sigma)
+#' @return numeric, the value of the normal density at x
+#' @export
+
+lambda <- function(x, v){
+	n <- length(x)
+	l <- n*(n+3)/2
+	assert_that(length(v) == l)
+	par <- v2p(v)
+	dmvnorm(x = x, mean = par$mu, sigma = par$sigma %*% par$sigma)
+}
+
+#' Compute the value of multiple normal distributions at point x with parameters V
+#' V must have length divisible by n*(n+3)/2, where n is the length of x
+#' The number of normal densities to evaluate is inferred from the length of x and
+#' the length of V.
+#' @param x the location at which to evaluate the normal density
+#' @param V the vector of parameters, in format c(mu1, sigma1,...,muK,sigmaK)
+#' @return numeric vector, the value of the K normal densities at x
+#' @export
+
+Lambda <- function(x,V){
+	n <- length(x)
+	l <- n*(n+3)/2
+	K <- length(V)/l
+
+	assert_that(K %% 1 == 0)
+
+	split(V, ceiling(seq_along(V)/l)) %>%
+		sapply(function(v) lambda(x,v))
+}
+
+#' Compute the gradient of the normal distribution at point x with respect to its parameters
+#' v. v must have length n*(n+3)/2, where n is the length of x.
+#' @param x the point at which to evaluate the gradient.
+#' @param v the parameters at which to evaluate the gradient
+#' @return numeric vector, the gradient at x and v.
+#' @export
+
+d_lambda <- function(x, v){
+	n <- length(x)
+	l <- n*(n+3)/2
+	assert_that(length(v) == l)
+
+	par <- v2p(v)
+
+	grads <- mvnorm.grad(x = x,
+						 mu = par$mu,
+						 sigma = par$sigma %*% par$sigma)
+
+	sig_base <- grads$sigma.grad %>%
+		UT_unravel()
+
+	sig_grad <- sig_base %*% square_grad(UT_unravel(par$sigma))
+	c(grads$mu.grad, sig_grad) %>% matrix() %>% t
+}
+
+#' Compute the gradient of a vector of normal distributions at point x with respect
+#' to parameters V.
+#' V must have length divisible by n*(n+3)/2, where n is the length of x.
+#' The number of normal densities to evaluate is inferred from the length of x and
+#' the length of V.
+#' @param x the point at which to evaluate the gradient.
+#' @param V the parameters at which to evaluate the gradient
+#' @return numeric matrix, the gradient at x and V.
+#' @export
+
+d_Lambda <- function(x, V){
+
+	n <- length(x)
+	l <- n*(n+3)/2
+	K <- length(V)/l
+
+	assert_that(K %% 1 == 0)
+
+	split(V, ceiling(seq_along(V)/l)) %>%
+		lapply(d_lambda, x = x) %>%
+		do.call(adiag, .)
+}
+
+#' Compute the gradient of a normal distribution with respect to its parameters.
+#' @param x a vector denoting location at which gradient is computed
+#' @param mua vector denoting mean of multivariate normal
+#' @param sigma covariance matrix
+#' @param log logical variable indicating whether density or log-density should be used
+#' @return list of vector and matrix, the gradient with respect to the mean and covariance matrix.
+#' @author Ravi Varadhan, Johns Hopkins University, June 24, 2009
+
+mvnorm.grad <- function(x, mu, sigma, log=FALSE) {
+
+	siginvmu <- c(solve(sigma, x-mu))
+	mu.grad <- siginvmu
+	sigma.grad <- tcrossprod(siginvmu) - solve(sigma)  # is there a way to avoid inverting `sigma'?
+	diag(sigma.grad) <- 0.5 * diag(sigma.grad)  # this is required to account for symmetry of covariance matrix
+
+	if (log) list(mu.grad=mu.grad, sigma.grad=sigma.grad) else
+	{
+		f <- dmvnorm(x, mean=mu, sigma=sigma, log=FALSE)
+		list(mu.grad=mu.grad*f, sigma.grad=sigma.grad*f)
+	}
+}
+
+#' Compute the normalized Hadamard product of two vectors.
+#' @param x first vector
+#' @param y second vector
+#' @return numeric
+#' @export
+
+phi <- function(x,y) x * y / x %*% y
+
+#' Compute the jacobian of phi
+#' @param x first vector
+#' @param y second vector
+#' @return numeric matrix
+#' @export
+
+d_phi <- function(x,y){
+	dot <- as.numeric(x %*% y)
+	dx <- t(dot * diag(y) - y %*% t(x * y)) / dot^2
+	dy <- t(dot * diag(x) - x %*% t(x * y)) / dot^2
+	cbind(dx, dy)
+}
+
+# -----------------------------------------------------------------------------
+# OBJECTIVE FUNCTIONS
+# -----------------------------------------------------------------------------
+
+#' Compute psi, the estimated distributon at a point x with parameters vec
+#' @param x
+#' @param vec
+#' @param dims
+#' @return matrix, the estimate
+#' @export
+psi <- function(x, vec, dims){
+	par <- from_vec(vec, dims)
+	phi(par$b, Lambda(x, par$V)) %*% par$Q
+}
+
+#' Compute d_psi, the gradient of psi at a point x with respect to its parameters vec
+#' @param x
+#' @param vec
+#' @param dims
+#' @return matrix, the gradient
+#' @export
+d_psi <- function(x, vec, dims){
+	par <- from_vec(vec, dims)
+	b <- par$b
+	V <- par$V
+	Q <- par$Q
+	K <- dims$K
+	J <- dims$J
+	# derivative with respect to b
+	db <- t(d_phi(b, Lambda(x,V))[,1:K]) %*% Q %>% t
+
+	# derivative with respect to V
+	dV <- t(d_phi(b, Lambda(x,V))[,(K+1):(2*K)] %*% d_Lambda(x,V)) %*% Q %>% t
+
+	# derivative with respect to Q
+	dQ <- phi(par$b, Lambda(x,par$V)) %>%
+		rep(J) %>%
+		split(., ceiling(seq_along(.)/K)) %>%
+		lapply(function(v) t(matrix(v))) %>%
+		do.call(adiag, .)
+
+	cbind(db, dV, dQ)
+}
+
+
+#' Construct the objective function for a problem given data and problem dimensions
+#' @param data
+#' @param dims
+#' @export
+
+obj_constructor <- function(data, dims){
+	obj_term <- function(x, p, vec){
+		DKL(p, psi(x = x, vec = vec, dims = dims))
+	}
+	obj <- function(vec){
+		X <- data$X
+		P <- data$P
 		1:dim(P)[1] %>%
 			matrix %>%
-			apply(1, function(i) fun(P[i,], Q[i,])) %>%
+			apply(1, function(i) obj_term(X[i,], P[i,], vec)) %>%
 			sum
 	}
+	obj
 }
-
-#' Compute the sum of squares distance between two probability distributions
-#' @param p
-#' @param q
-#' return numeric the distance
+#' Construct the gradient of the objective function for a problem given data and problem dimensions
+#' @param data
+#' @param dims
 #' @export
 
-sum_of_squares <- function(p,q){
-	if(length(p) != length(q)){
-		stop('Distribution alphabets are different size')
+grad_constructor <- function(data, dims){
+	grad_term <- function(x, p, vec, dims){
+		first <- p / psi(x, vec, dims)
+		second <- d_psi(x, vec, dims)
+		- first %*% second
 	}
-	(p - q)^2 %>% sum
-}
-
-#' Compute the entropy of a vector
-#' @param the vector to compute the entropy of
-#' @export
-H <- function(p){
-	- p %*% log(p) %>% as.numeric
+	obj_grad <- function(vec){
+		X <- data$X
+		P <- data$P
+		1:dim(P)[1] %>%
+			matrix %>%
+			apply(1, function(i) grad_term(X[i,], P[i,], vec, dims)) %>%
+			rowSums()
+	}
 }
 
 

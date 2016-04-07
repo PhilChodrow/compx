@@ -33,7 +33,6 @@ test_that('Random PD matrix generator does indeed return a PD matrix',{
 
 test_that('Random param generator gives valid params',{
 
-
 	pars <- random_params(dims)
 	Q <- pars$Q
 	Mu <- pars$Mu

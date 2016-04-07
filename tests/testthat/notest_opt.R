@@ -14,17 +14,16 @@ i <- 10
 data$P <- data$P[1:i,]
 data$X <- data$X[1:i,]
 
-dims <- get_dims(data, K = 2)
+dims <- get_dims(data, K = 5)
 pars <- random_params(dims)
 v <- to_vector(pars)
 
-problem <- make_problem(data, dims, obj_fun = DKL)
+problem <- make_problem(data, dims, obj_fun = sum_of_squares)
 
 sol <- auglag(par = v,
 	   fn = problem$objective,
 	   hin = problem$hin,
 	   heq = problem$heq)
-
 
 pars <- from_vector(sol$par,dims)
 ests <- est(data, pars)

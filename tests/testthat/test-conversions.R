@@ -2,13 +2,12 @@ library(compx)
 
 context("Argument conversions")
 
-n <- sample(5:10, 1)
+n <- sample(2:5, 1)
 I <- sample(4:10, 1)
 J <- sample(2:20, 1)
 K <- sample(10:20, 1)
 
 dims <- list(n = n, I = I, J = J, K = K)
-pars <- random_params(dims)
 
 test_that("matrix ravel and unravel are inverses.",{
 
@@ -26,29 +25,23 @@ test_that("matrix ravel and unravel are inverses.",{
 	expect_that(v, equals(u))
 })
 
-test_that("parameter conversion to matrix is invertible", {
 
-	M <- to_matrix(pars)
-	p <- from_matrix(M, dims)
+test_that('to and from vector are inverses',{
 
-	expect_true(all.equal(p, pars, check.attributes = FALSE))
+	b <- runif(K, 0, 1)
+	V <- rnorm(n*(n+3) / 2 * K)
+	Q <- rnorm(K * J) %>% matrix(K, J)
+	par <- list(b = b, V = V, Q = Q)
+
+	converted <- to_vec(par) %>% from_vec(dims)
+
+	expect_true(all.equal(converted$b, b))
+	expect_true(all.equal(converted$V, V))
+	expect_true(all.equal(converted$Q, Q))
 })
 
-test_that('conversion to vector is invertible',{
 
-	V <- to_vector(pars)
-	p <- from_vector(V, dims)
-	v <- to_vector(p)
 
-	expect_true(all.equal(p, pars, check.attributes = FALSE))
-	expect_true(all.equal(v, V, check.attributes = FALSE))
-})
-
-test_that('matrix square root is correct',{
-	A <- random_PD_matrix(10)
-	B <- square_root(A)
-	expect_true(all.equal(B%*%B, A))
-})
 
 
 
