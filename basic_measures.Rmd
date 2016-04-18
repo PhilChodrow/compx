@@ -1,0 +1,171 @@
+---
+title: "Basic Spatial Information Measures"
+author: "Phil"
+date: "April 18, 2016"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 1
+    theme: flatly
+    code_folding: hide
+---
+
+
+```{r setup, include=FALSE}
+library(compx)
+library(dplyr)
+library(leaflet)
+library(rgeos)
+library(rgdal)
+library(expm)
+```
+
+```{r params, message=FALSE, warning=FALSE, cache = TRUE}
+# PARAMS
+# But figure out how to do parameterized reports eventually
+
+states   <- 'MA'
+counties <- c(025)
+```
+
+```{r get_data, message=FALSE, warning=FALSE, cache = TRUE}
+	
+income_merged <- get_census_data(state = states, counties = counties, table_num = "B19001")
+
+# income_merged@data <- income_merged@data %>%
+#     mutate(percent =  100 * Household.Income..Less.than..10.000 / Household.Income..Total.,
+#     	   ID = row.names(income_merged))
+
+data <- format_data(income_merged)
+income_merged@data <- income_merged@data[row.names(data$P),]
+
+```
+
+What we'd like to do is construct a function that takes a given polygon, finds the polygons next to it, grabs their distributions, and constructs their empirical distribution as an estimator. 
+
+```{r}
+adj_estimate <- function(i, ring = TRUE){
+	adj <- gTouches(income_merged, byid = TRUE) * 1
+	adj <- adj[row.names(data$P), row.names(data$P)] 
+	m <- (adj %^% i > 0) * 1
+	if(ring){
+		inner <- matrix(0, dim(m)[1], dim(m)[2])
+		powered <- diag(1, dim(m)[1], dim(m)[2])
+		for (j in 1:(i-1)){
+			powered <- ((powered %*% adj) > 0) * 1
+			inner <- ((inner + powered) > 0) * 1
+		}
+		m <- m - inner
+	}
+	estimates <- m %*% data$P
+	estimates <- estimates / rowSums(estimates)
+	estimates
+}
+```
+
+Now we'll compute the KL divergence between the spatial estimates and the actual data. 
+
+```{r}
+ests <- adj_estimate(5, ring = TRUE)
+max(ests)
+
+income_merged@data$spatial_div <- 1:dim(ests)[1] %>% matrix %>%
+	apply(MARGIN = 1, FUN = function(i) DKL(data$P[i,], ests[i,]))
+
+income_merged@data$entropy <- 1:dim(ests)[1] %>% matrix %>%
+	apply(MARGIN = 1, FUN = function(i) H(data$P[i,]))
+
+income_merged@data <- income_merged@data %>%
+	mutate(ratio = - log(spatial_div / entropy))
+
+```
+Some additional visualizations
+```{r}
+adj_estimate(10, ring = TRUE) %>% heatmap(Rowv = NA, Colv = NA, scale = 'none', zlim = c(0,.3))
+data$P %>% heatmap(Rowv = NA, Colv = NA, scale = 'none',zlim = c(0, .3))
+```
+
+
+
+```{r map}
+pal <- colorNumeric(
+  palette = "YlGnBu",
+  domain = income_merged@data$spatial_div[is.finite(income_merged@data$spatial_div)]
+)
+
+popup <- paste0('Entropy: ', income_merged@data$entropy)
+
+map <-leaflet() %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(data = income_merged, 
+              fillColor = ~pal(spatial_div), 
+              color = "#b2aeae", # you need to use hex colors
+              fillOpacity = 0.7, 
+              weight = 1, 
+              smoothFactor = 0.2,
+              popup = popup) %>%
+  addLegend(pal = pal, 
+            values = income_merged@data$spatial_div[is.finite(income_merged@data$spatial_div)], 
+            position = "bottomright", 
+            title = "Spatial divergence") 
+map
+```
+
+
+Spatial distribution of predictiveness. Positive values indicate that neighbors are at least partially predictive. 
+
+```{r map3}
+pal <- colorNumeric(
+  palette = "YlGnBu",
+  domain = income_merged@data$ratio[is.finite(income_merged@data$ratio)]
+)
+
+popup <- paste0('Entropy: ', income_merged@data$entropy)
+
+map <-leaflet() %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(data = income_merged, 
+              fillColor = ~pal(ratio), 
+              color = "#b2aeae", # you need to use hex colors
+              fillOpacity = 0.7, 
+              weight = 1, 
+              smoothFactor = 0.2,
+              popup = popup) %>%
+  addLegend(pal = pal, 
+            values = income_merged@data$ratio[is.finite(income_merged@data$ratio)], 
+            position = "bottomright", 
+            title = "Spatial\n Predictiveness") 
+map
+```
+
+Spatial distribution of entropy
+```{r map2}
+pal <- colorNumeric(
+  palette = "YlGnBu",
+  domain = income_merged@data$entropy[is.finite(income_merged@data$entropy)]
+)
+
+popup <- paste0('Entropy: ', income_merged@data$entropy)
+
+map <-leaflet() %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(data = income_merged, 
+              fillColor = ~pal(entropy), 
+              color = "#b2aeae", # you need to use hex colors
+              fillOpacity = 0.7, 
+              weight = 1, 
+              smoothFactor = 0.2,
+              popup = popup) %>%
+  addLegend(pal = pal, 
+            values = income_merged@data$entropy[is.finite(income_merged@data$entropy)], 
+            position = "bottomright", 
+            title = "Spatial divergence") 
+map
+```
+
+# TODO
+
+It looks like we have some kind of bug in our adjacency estimator stuff. 
+Plot the average predictiveness vs. adjacency distance
+Think about the right normalization. For example, normalize against the divergence of the distribution from the whole city distribution. 
