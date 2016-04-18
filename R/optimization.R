@@ -57,3 +57,47 @@ make_problem <- function(data, dims){
 		 hin = hin,
 		 grad_hin = grad_hin)
 }
+
+#' Find a warm-start, feasible solution at which to initialize the problem.
+#' @param data the data
+#' @param dims the dimension of the problem, but only K (the number of component distributions) is used
+#' @return V a vector of candidate parameters
+#' @export
+
+warm_start <- function(data, dims){
+
+	pars <- list()
+
+	pars$b <- rep(1.0/dims$K, dims$K) # b is uniform to start
+	mu <- kmeans(data$X, dims$K)$centers # plausible centroids
+
+	# all covariance matrices equal at first
+	lims <- apply(data$X, 2, range)
+	ranges <- lims[2,] - lims[1,]
+	area <- prod(ranges)
+	d <- area / (2*dims$K) # find the diagonal element
+
+	sig <- 1:dims$K %>% # construct K identical, diagonal matrices
+		matrix %>%
+		apply(1, function(i) UT_unravel(diag(d, dims$n))) %>%
+		matrix
+
+	# compute plausible starting values for component distributions Q.
+
+	M <- cbind(mu, sig)
+	make_component <- function(k){
+		v <- M[k,]
+		weights <- apply(data$X, MARGIN = 1, lambda, v = v)
+		(weights %*% data$P) / sum(weights)
+	}
+	pars$Q <- 1:dims$K %>%
+		matrix %>%
+		apply(MARGIN = 1, make_component) %>%
+		t
+	assert_that(all.equal(rowSums(pars$Q), rep(1, dims$K)))
+
+	pars$V <- M %>% t %>% c
+
+	pars
+
+}

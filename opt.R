@@ -1,34 +1,51 @@
+library(dplyr)
 library(compx)
 library(alabama)
 
+i <- 15
+j <- 2
+n <- 1
+k <- 10
 
-states   <- 'MA'
-counties <- c(025)
+q <- runif(k*j,0,1) %>%
+	matrix(k,j) %>%
+	apply(MARGIN = 1, FUN = simplex_normalize) %>%
+	t
 
-data <- get_census_data(state = states, counties = counties, table_num = "B19001") %>%
-	format_data()
+mu <- 1:k %>% matrix
+sig <- .5
 
-i <- 10
-data$P <- data$P[1:i,]
-data$X <- data$X[1:i,]
+b <- runif(k, 0, 1)
 
-dims <- get_dims(data, K = 2)
+v <- cbind(mu, sig) %>% t %>% c
+
+x <- seq(0,k+1,by = .1) %>% matrix
+
+dims <- list(I = i, J = j, K = k, n = n)
+pars <- list(Q = q, b = b, V = v)
+
+gen_vec <- to_vec(pars)
+
+p <- x %>% apply(MARGIN = 1, FUN = psi, vec = gen_vec, dims = dims) %>% t
+
+heatmap(p, Rowv = NA, Colv = NA, scale = 'column')
+
+data <- list(X = x, P = p)
+
+
+dims <- get_dims(data, K = 5)
 n <- dims$n
 K <- dims$K
 J <- dims$J
 I <- dims$I
 
 center <- data$X %>% colMeans()
-
-x_range <- max(data$X[,'lon']) - min(data$X[,'lon'])
-y_range <- max(data$X[,'lat']) - min(data$X[,'lat'])
-
+range <- max(data$X) - min(data$X)
 # initialize spatial responsibility functions
 f <- function(i){
-	mu_x <- runif(1, center['lon'] - x_range, center['lon'] + x_range)
-	mu_y <- runif(1, center['lat'] - x_range, center['lat'] + x_range)
-	sigma <- c(sqrt(x_range), 0, sqrt(y_range))
-	v <- c(mu_x, mu_y, sigma)
+	mu <- runif(1, center - range, center + range)
+	sigma <- sig
+	v <- c(mu, sig)
 }
 
 V <- 1:K %>%
@@ -46,17 +63,10 @@ vec <- to_vec(par)
 
 par <- from_vec(vec, dims)
 
-
 n_params <- K * (n*(n+3)/2 + 1 + J)
 
 problem <- make_problem(data, dims)
 
-obj_term(data$X[1,], data$P[1,], vec)
-psi(x = data$X[1,], vec = vec, dims = dims)
-
-problem$objective(vec)
-
-problem$gradient(vec)
 
 
 opt_pars <- auglag(par = vec,
@@ -66,7 +76,7 @@ opt_pars <- auglag(par = vec,
 	   # ,
 	   # gr = problem$gradient
 	   # ,
-	   control.outer = list(sig0 = 100,  i.scale = 1/100) # not sure if this is right, but we REALY don't want to violate the inequality constraints!
+	   # control.outer = list(sig0 = 100,  i.scale = 1/100) # not sure if this is right, but we REALY don't want to violate the inequality constraints!
 	   # ,
 	   # hin.jac = problem$grad_hin
 	   # ,
@@ -74,14 +84,28 @@ opt_pars <- auglag(par = vec,
 	   )
 
 
+par(mfrow = c(2,2))
 
-opt_pars$par %>% from_vec(dims)
+Psi(X = data$X, vec = opt_pars$par, dims = dims) %>%
+	t %>%
+	heatmap(Rowv = NA, Colv = NA, scale = 'none')
 
-opt_pars$gradient
+ heatmap(p, Rowv = NA, Colv = NA, scale = 'none')
 
-problem$hin(opt_pars$par) > 0
+ dat <- p %>% data.frame %>% tbl_df
+ mod <- Psi(X = data$X, vec = opt_pars$par, dims = dims) %>%
+ 	t %>% data.frame %>% tbl_df
 
 
-problem$gradient(opt_pars$par) - opt_pars$gradient
 
-jacobian(problem$objective, opt_pars$par) %>% c
+library(ggplot2)
+
+
+problem$objective(opt_pars$par) # is this just being calculated wrong?
+# sure looks like it!
+# WORKING HYPOTHESIS: the objective function is wrong, possibly on the DKL side,
+# in that it's not capturing approximations to the data, but rather doing something else.
+# we can see this by the fact that it has very low values, essentially zero, for a
+# collection of distributions that are not even close to the same. So, we need
+# to change the way that the objective is calculated and ensure that it is zero on
+# identical arrays, but only on identical arrays.

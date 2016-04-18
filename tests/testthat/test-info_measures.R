@@ -35,6 +35,34 @@ test_that("Divergence works if p has zeros",{
 	expect_true(is.infinite(DKL(q,p)))
 })
 
+test_that("Divergence across two matrices is zero only if they are the same",{
+	P <- runif(K * J, 0,1) %>%
+		matrix(K,J) %>%
+		apply(MARGIN = 1, FUN = simplex_normalize) %>%
+		t
+
+	Q <- runif(K * J, 0,1) %>%
+		matrix(K,J) %>%
+		apply(MARGIN = 1, FUN = simplex_normalize) %>%
+		t
+
+	obj1 <- 1:dim(P)[1] %>%
+		matrix %>%
+		apply(MARGIN = 1, FUN = function(i) DKL(P[i,], Q[i,])) %>%
+		sum
+
+	obj2 <- 1:dim(P)[1] %>%
+		matrix %>%
+		apply(MARGIN = 1, FUN = function(i) DKL(P[i,], P[i,])) %>%
+		sum
+
+	expect_true(obj1 > 0)
+	expect_true(obj2 == 0)
+	# Ok, this appears to work correctly, so what we should do now is use this same idiom to calculate the objective function (i.e. first calculate the estimate matrix and then iterate over it.)
+
+})
+
+
 test_that("Entropy is divergence from uniform",{
 	p <- runif(10, 0,1)
 	p <- p / sum(p)

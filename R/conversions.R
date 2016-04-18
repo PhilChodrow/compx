@@ -5,10 +5,10 @@
 
 
 #' @export
-to_vec <- function(par){
-	b <- par$b
-	V <- par$V
-	Q <- par$Q
+to_vec <- function(pars){
+	b <- pars$b
+	V <- pars$V
+	Q <- pars$Q
 	c(b,V,c(Q))
 }
 
@@ -25,7 +25,7 @@ from_vec <- function(vec, dims){
 	V <- vec[(K+1):(l + K)]
 	q <- vec[(l+K+1):length(vec)]
 	J <- length(q)/K
-	assert_that(J %% 1 == 0)
+	# assert_that(J %% 1 == 0)
 
 	Q <- matrix(q, K, J)
 	list(b = b, V = V, Q = Q)
@@ -37,7 +37,7 @@ from_vec <- function(vec, dims){
 v2p <- function(v){
 	n   <- find_n(v, mean = TRUE)
 	mu  <- v[1:n]
-	sigma <- v[(n+1):length(v)] %>% UT_ravel
+	sigma <- UT_ravel(v[(n+1):length(v)])
 
 	list(mu = mu, sigma = sigma)
 }
@@ -65,7 +65,7 @@ UT_unravel <- function(M){
 #' @export
 
 find_n <- function(v, mean = FALSE){
-	b <- ifelse(mean, 3, 1)
+	b <- 1 + 2*mean
 	n <- (-b + sqrt(b^2 + 8*length(v)))/2
 	if(n %% 1 != 0){
 		stop("v not conformable")
@@ -77,6 +77,9 @@ find_n <- function(v, mean = FALSE){
 #' @export
 
 UT_ravel <- function(v){
+	if(length(v) == 1){
+		return(matrix(v))
+	}
 	n <- find_n(v, mean = FALSE)
 	x <- matrix(0, n, n)
 	x[lower.tri(x, diag = TRUE)] <- v

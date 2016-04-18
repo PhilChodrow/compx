@@ -88,13 +88,29 @@ random_locs <- function(dims){
 	X
 }
 
-#' Generate random data for analysis
-#' @param n the spatial dimension
-#' @param I the number of locations
-#' @param J the number of bins
-#' @return data a list of [1] locations and [2] corresponding distributions
+#' Make a random, evenly-spaced, spatially structured data set in one dimension.
 #' @export
 
-random_data <- function(dims){
-	list(X = random_locs(dims), P = random_distributions(dims))
+random_1d_data <- function(dims){
+
+	q <- runif(dims$K*dims$J,0,1) %>%
+		matrix(dims$K,dims$J) %>%
+		apply(MARGIN = 1, FUN = simplex_normalize) %>%
+		t
+	mu <- 1:dims$K %>% matrix
+
+	sig <- .5
+	b <- runif(dims$K, 0, 1)
+	v <- cbind(mu, sig) %>% t %>% c
+	x <- seq(0,dims$K+1,by = .1) %>% matrix
+
+	pars <- list(Q = q, b = b, V = v)
+	gen_vec <- to_vec(pars)
+	p <- x %>% apply(MARGIN = 1,
+					 FUN = psi,
+					 vec = gen_vec,
+					 dims = dims) %>% t
+
+	list(P = p, X = x)
 }
+

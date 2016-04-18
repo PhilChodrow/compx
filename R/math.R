@@ -1,7 +1,7 @@
 #' math
 #' @name math
 #' @docType package
-#' @import dplyr mvtnorm matrixcalc numDeriv magic
+#' @import dplyr mvtnorm matrixcalc numDeriv magic mvnfast
 
 NULL
 
@@ -99,9 +99,9 @@ square_grad <- function(sig){
 lambda <- function(x, v){
 	n <- length(x)
 	l <- n*(n+3)/2
-	assert_that(length(v) == l)
-	par <- v2p(v)
-	dmvnorm(x = x, mean = par$mu, sigma = par$sigma %*% par$sigma)
+	# assert_that(length(v) == l)
+	pars <- v2p(v)
+	dmvn(X = x, mu = pars$mu, sigma = pars$sigma %*% pars$sigma)
 }
 
 #' Compute the value of multiple normal distributions at point x with parameters V
@@ -118,10 +118,11 @@ Lambda <- function(x,V){
 	l <- n*(n+3)/2
 	K <- length(V)/l
 
-	assert_that(K %% 1 == 0)
+	# assert_that(K %% 1 == 0)
 
-	split(V, ceiling(seq_along(V)/l)) %>%
-		sapply(function(v) lambda(x,v))
+	M <- t(matrix(V, l, K))
+	apply(M, MARGIN = 1, lambda, x = x)
+
 }
 
 #' Compute the gradient of the normal distribution at point x with respect to its parameters
@@ -230,6 +231,11 @@ psi <- function(x, vec, dims){
 	phi(par$b, Lambda(x, par$V)) %*% par$Q
 }
 
+#' @export
+Psi <- function(X, vec, dims){
+		t(apply(X, MARGIN = 1, FUN = psi, vec = vec, dims = dims))
+}
+
 #' Compute d_psi, the gradient of psi at a point x with respect to its parameters vec
 #' @param x
 #' @param vec
@@ -266,17 +272,18 @@ d_psi <- function(x, vec, dims){
 #' @export
 
 obj_constructor <- function(data, dims){
-	obj_term <- function(x, p, vec){
-		DKL(p, psi(x = x, vec = vec, dims = dims))
-	}
+	# refactor this so that we compute the matrix of estimates first, and then loop
+	# over that and P.
+
 	obj <- function(vec){
-		X <- data$X
-		P <- data$P
-		1:dim(P)[1] %>%
+		estimates <- Psi(data$X, vec, dims)
+
+		1:dim(data$P)[1] %>%
 			matrix %>%
-			apply(1, function(i) obj_term(X[i,], P[i,], vec)) %>%
+			apply(1, function(i) DKL(data$P[i,], estimates[i,])) %>%
 			sum
 	}
+
 	obj
 }
 #' Construct the gradient of the objective function for a problem given data and problem dimensions
