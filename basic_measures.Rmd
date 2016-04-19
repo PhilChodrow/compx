@@ -1,5 +1,5 @@
 ---
-title: "Basic Spatial Information Measures"
+title: "Spatial Information Measures"
 author: "Phil"
 date: "April 18, 2016"
 output:
@@ -11,6 +11,25 @@ output:
     code_folding: hide
 ---
 
+# Motivation
+
+We're interested in the spatial structure and complexity of compositional phenomena. Our working example is the structure of demographics as they mix in space. In this document, we're looking at income. 
+
+# Methods
+
+The KL divergence between two distributions $p$ and $q$ defined on an alphabet $\left|\mathcal{X}\right|$ is defined as 
+
+$$D[p||q] = \mathbb{E}_p\left[\log \frac{p(X)}{q(X)}\right] = \sum_{x \in \mathcal{X}} p(x) \log \frac{p(x)}{q(x)}$$
+
+In this document, we use the divergence $D$ as a measure of correlation and similarity. We show how this metric can be used to study the scale of spatial correlation between block groups, and motivate a more subtle approach based on maximum likelihood estimation. 
+
+# Interpretation of Information Measures
+
+## The idea of information loss
+
+This is where we'll put a very nice little interpretation of the kind of information loss that we ar etalking about and how it works.
+
+# Data Used
 
 ```{r setup, include=FALSE}
 library(compx)
@@ -19,17 +38,23 @@ library(leaflet)
 library(rgeos)
 library(rgdal)
 library(expm)
+library(ggplot2)
 ```
 
-```{r params, message=FALSE, warning=FALSE, cache = TRUE}
+```{r params, message=FALSE, warning=FALSE, cache = TRUE, include=FALSE}
 # PARAMS
 # But figure out how to do parameterized reports eventually
 
 states   <- 'MA'
 counties <- c(025)
+
+states   <- 'NY'
+counties <- c(61,5,81)
+counties <- c(61)
+
 ```
 
-```{r get_data, message=FALSE, warning=FALSE, cache = TRUE}
+```{r get_data, message=FALSE, warning=FALSE, cache = TRUE, include=FALSE}
 	
 income_merged <- get_census_data(state = states, counties = counties, table_num = "B19001")
 
@@ -42,9 +67,8 @@ income_merged@data <- income_merged@data[row.names(data$P),]
 
 ```
 
-What we'd like to do is construct a function that takes a given polygon, finds the polygons next to it, grabs their distributions, and constructs their empirical distribution as an estimator. 
 
-```{r}
+```{r def_spatial_estimate, include=FALSE}
 adj_estimate <- function(i, ring = TRUE){
 	adj <- gTouches(income_merged, byid = TRUE) * 1
 	adj <- adj[row.names(data$P), row.names(data$P)] 
@@ -64,89 +88,40 @@ adj_estimate <- function(i, ring = TRUE){
 }
 ```
 
-Now we'll compute the KL divergence between the spatial estimates and the actual data. 
+```{r prep_map, include=FALSE}
+ests <- adj_estimate(1, ring = TRUE)
 
-```{r}
-ests <- adj_estimate(5, ring = TRUE)
-max(ests)
+mean_dist <- data$P %>% colMeans
 
 income_merged@data$spatial_div <- 1:dim(ests)[1] %>% matrix %>%
 	apply(MARGIN = 1, FUN = function(i) DKL(data$P[i,], ests[i,]))
+
+income_merged@data$base <- 1:dim(ests)[1] %>% matrix %>%
+	apply(MARGIN = 1, FUN = function(i) DKL(data$P[i,], mean_dist))
 
 income_merged@data$entropy <- 1:dim(ests)[1] %>% matrix %>%
 	apply(MARGIN = 1, FUN = function(i) H(data$P[i,]))
 
 income_merged@data <- income_merged@data %>%
-	mutate(ratio = - log(spatial_div / entropy))
+	mutate(diff = base - spatial_div )
+
+
 
 ```
-Some additional visualizations
-```{r}
-adj_estimate(10, ring = TRUE) %>% heatmap(Rowv = NA, Colv = NA, scale = 'none', zlim = c(0,.3))
-data$P %>% heatmap(Rowv = NA, Colv = NA, scale = 'none',zlim = c(0, .3))
-```
 
+# Results {.tabset}
 
+## Entropy
 
-```{r map}
-pal <- colorNumeric(
-  palette = "YlGnBu",
-  domain = income_merged@data$spatial_div[is.finite(income_merged@data$spatial_div)]
-)
+We can visualize the entropy corresponding to each block group. Block groups with entropy significantly different than their neighbors have distributions that are qualitatively different, and therefore unlikely to be well-predicted by their neighbors. 
 
-popup <- paste0('Entropy: ', income_merged@data$entropy)
-
-map <-leaflet() %>%
-  addProviderTiles("CartoDB.Positron") %>%
-  addPolygons(data = income_merged, 
-              fillColor = ~pal(spatial_div), 
-              color = "#b2aeae", # you need to use hex colors
-              fillOpacity = 0.7, 
-              weight = 1, 
-              smoothFactor = 0.2,
-              popup = popup) %>%
-  addLegend(pal = pal, 
-            values = income_merged@data$spatial_div[is.finite(income_merged@data$spatial_div)], 
-            position = "bottomright", 
-            title = "Spatial divergence") 
-map
-```
-
-
-Spatial distribution of predictiveness. Positive values indicate that neighbors are at least partially predictive. 
-
-```{r map3}
-pal <- colorNumeric(
-  palette = "YlGnBu",
-  domain = income_merged@data$ratio[is.finite(income_merged@data$ratio)]
-)
-
-popup <- paste0('Entropy: ', income_merged@data$entropy)
-
-map <-leaflet() %>%
-  addProviderTiles("CartoDB.Positron") %>%
-  addPolygons(data = income_merged, 
-              fillColor = ~pal(ratio), 
-              color = "#b2aeae", # you need to use hex colors
-              fillOpacity = 0.7, 
-              weight = 1, 
-              smoothFactor = 0.2,
-              popup = popup) %>%
-  addLegend(pal = pal, 
-            values = income_merged@data$ratio[is.finite(income_merged@data$ratio)], 
-            position = "bottomright", 
-            title = "Spatial\n Predictiveness") 
-map
-```
-
-Spatial distribution of entropy
 ```{r map2}
 pal <- colorNumeric(
   palette = "YlGnBu",
   domain = income_merged@data$entropy[is.finite(income_merged@data$entropy)]
 )
 
-popup <- paste0('Entropy: ', income_merged@data$entropy)
+popup <- paste0('Entropy: ', round(income_merged@data$entropy, 2))
 
 map <-leaflet() %>%
   addProviderTiles("CartoDB.Positron") %>%
@@ -164,8 +139,77 @@ map <-leaflet() %>%
 map
 ```
 
+## Prediction Value
+
+Spatial distribution of predictiveness. Positive values indicate that neighbors are at least partially predictive. The mean value of `r round(mean(income_merged@data$diff[is.finite(income_merged@data$diff)]),2)` indicates that neighboring block groups have better-than-baseline prediction value; i.e. spatial structure is present. 
+
+```{r map3}
+pal <- colorNumeric(
+  palette = "YlGnBu",
+  domain = income_merged@data$diff[is.finite(income_merged@data$diff)]
+)
+
+popup <- paste0('Entropy: ', round(income_merged@data$entropy, 2))
+
+map <-leaflet() %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addPolygons(data = income_merged, 
+              fillColor = ~pal(diff), 
+              color = "#b2aeae", # you need to use hex colors
+              fillOpacity = 0.7, 
+              weight = 1, 
+              smoothFactor = 0.2,
+              popup = popup) %>%
+  addLegend(pal = pal, 
+            values = income_merged@data$diff[is.finite(income_merged@data$diff)], 
+            position = "bottomright", 
+            title = "Spatial\n Predictiveness") 
+map
+```
+
+
+## Scale of spatial structure
+
+We can observe the scale of spatial structure by computing the mean divergence for neighbors of varying orders. As a baseline, we use the average, city-wide distribution and measure its value as a predictor. The graph shows that neighbors of orders 1 and 2 are quite strong predictors, but that prediction value decays rapidly thereafter. Average spatial structure breaks down at around 10 block groups, and we begin to observe negative correlations thereafter.   
+
+```{r warning=FALSE, cache = TRUE}
+
+baseline <- 1:dim(data$P)[1] %>% matrix %>%
+	apply(MARGIN = 1, FUN = function(i) DKL(data$P[i,], mean_dist)) %>%
+	mean 
+
+mean_div <- function(i){
+	ests <- adj_estimate(i = i, ring = TRUE)
+	ests <- ests[!rowSums(!is.finite(ests)),]
+
+	comp <- data$P[row.names(ests),]
+	
+	divs <- 1:dim(ests)[1] %>% matrix %>%
+	apply(MARGIN = 1, FUN = function(i) DKL(comp[i,], ests[i,])) 
+	divs <- divs[is.finite(divs)]
+	mean(divs)
+}
+
+cors <- 1:20 %>% matrix %>% apply(MARGIN = 1, mean_div)
+
+p <- data_frame(cors) %>% 
+	mutate(i = row_number()) %>%
+	ggplot(aes(x = i, y = cors)) + geom_line() + geom_point()  + 
+	geom_hline(yintercept = baseline, color = 'blue') + 
+	theme_minimal() + ylab('KL Divergence') + xlab('Block group network distance') + ggtitle('Scale of Spatial Correlations') + 
+	annotate('text', x = 10, y = baseline + .01,  label = 'baseline', color = 'blue')
+	
+p
+
+```
+
+# Discussion
+
+The overall point is not that these results achieve anything revolutionary, but rather to demonstrate
+
+1. That information theoretic tools lead to natural measures of spatial structure and complexity.
+2. Social phenomena in cities exhibit spatial structure, which more sophisticated algorithms (for example, based on maximum-likelihood principles) can discover and quantify in greater detail. 
+
 # TODO
 
-It looks like we have some kind of bug in our adjacency estimator stuff. 
-Plot the average predictiveness vs. adjacency distance
-Think about the right normalization. For example, normalize against the divergence of the distribution from the whole city distribution. 
+- Do a similar plot regarding spatial scale, but have it be tied to geographic distance rather than the topology of the polygon layer, which is to some extent arbitrary. 
