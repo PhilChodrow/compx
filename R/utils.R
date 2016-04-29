@@ -70,15 +70,18 @@ get_table <- function(data){
 }
 
 #' @export
-format_data <- function(acs_data){
+format_data <- function(acs_data, omit_0 = F){
 	P <- acs_data %>%
 		get_table() %>%
 		as.matrix()
+	P <- P + 1
 	P <- P %>%
 		t %>%
 		scale(., center=FALSE, scale = colSums(.)) %>%
-		t %>%
-		na.omit
+		t
+	if(omit_0){
+		P <- na.omit(P)
+	}
 	X <- get_centroids(acs_data)
 	X <- X[row.names(P),]
 	data <- list(X = X, P = P)

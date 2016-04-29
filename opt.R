@@ -33,39 +33,12 @@ heatmap(p, Rowv = NA, Colv = NA, scale = 'column')
 data <- list(X = x, P = p)
 
 
-dims <- get_dims(data, K = 5)
-n <- dims$n
-K <- dims$K
-J <- dims$J
-I <- dims$I
+K = 2
+model_dims <- get_dims(data, K = K)
+problem <- make_problem(data, model_dims)
 
-center <- data$X %>% colMeans()
-range <- max(data$X) - min(data$X)
-# initialize spatial responsibility functions
-f <- function(i){
-	mu <- runif(1, center - range, center + range)
-	sigma <- sig
-	v <- c(mu, sig)
-}
-
-V <- 1:K %>%
-	matrix %>%
-	apply(1, f) %>%
-	c
-
-# V <- rnorm(n*(n+3) / 2 * K)
-
-
-b <- runif(K, 0, 1)
-Q <- random_representatives(dims)
-par <- list(b = b, V = V, Q = Q)
-vec <- to_vec(par)
-
-par <- from_vec(vec, dims)
-
-n_params <- K * (n*(n+3)/2 + 1 + J)
-
-problem <- make_problem(data, dims)
+pars <- warm_start(data, model_dims)
+vec <- to_vec(pars)
 
 
 

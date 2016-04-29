@@ -7,9 +7,9 @@ library(mvtnorm)
 
 context("gradient math")
 
-I <- sample(2:10, 1)
-n <- sample(2:5, 1)
-K <- sample(2:5, 1)
+I <- sample(3:10, 1)
+n <- sample(3:5, 1)
+K <- sample(3:5, 1)
 J <- 4
 dims <- list(n = n, I = I, J = J, K = K)
 
@@ -20,6 +20,22 @@ Q <- random_representatives(dims)
 par <- list(b = b, V = V, Q = Q)
 vec <- to_vec(par)
 
+
+test_that("square grad",{
+
+	sig <- rnorm(10)
+
+	check <- function(sig){
+		f <- function(sig){
+			X <- sig %>% UT_ravel()
+			X %*% X %>% UT_unravel() # X is itself symmetric
+		}
+		jacobian(func = f, x = sig)
+	}
+
+	expect_true(all.equal(check(sig), square_grad(sig)))
+
+})
 
 
 test_that("normed hadamard gradient",{
@@ -48,14 +64,18 @@ test_that("spatial gradient is correct",{
 
 test_that("analytic gradient equals numeric gradient of objective function",{
 
-	data <- random_data(dims)
+	data_dims <- list(n = n, K = I, I = I, J = J)
+	P <- random_representatives(data_dims)
+	X <- rnorm(J * I) %>% matrix(I, J)
+	data <- list(X = X, P = P)
+
 	obj <- obj_constructor(data = data, dims = dims)
 	gradient <- grad_constructor(data, dims)
 	par <- list(b = b, V = V, Q = Q)
 	vec <- to_vec(par)
 
 	grad1 <- gradient(vec)
-	grad2 <- jacobian(obj, vec)
+	grad2 <- jacobian(obj, vec) %>% c
 
 	expect_true(all.equal(grad1, grad2, check.attributes = FALSE))
 

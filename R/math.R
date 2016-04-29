@@ -1,7 +1,7 @@
 #' math
 #' @name math
 #' @docType package
-#' @import dplyr mvtnorm matrixcalc numDeriv magic mvnfast
+#' @import dplyr mvtnorm matrixcalc numDeriv magic mvnfast gdata
 
 NULL
 
@@ -16,6 +16,7 @@ NULL
 #' @export
 
 simplex_check <- function(p, allow_zero = TRUE){
+	if(min(is.na(p)) == 1) return(FALSE)
 	nonneg <- ifelse(allow_zero, min(p >= 0), min(p > 0))
 	normed <- abs(sum(p) - 1) < .1 # numerical tolerance
 	nonneg & normed
@@ -43,6 +44,9 @@ simplex_normalize <- function(p){
 #' @export
 
 DKL <- function(p,q){
+	if(!is.numeric(p) | !is.numeric(q)){
+		return(NaN)
+	}
 
 	if(!simplex_check(p) | !simplex_check(q)){
 		message <- paste0('p or q are not on the simplex: sum(p) = ', sum(p), ' and sum(q) = ', sum(q))
@@ -67,6 +71,8 @@ H <- function(p){
 		message <- paste0('p is not on the simplex: sum(p) = ', sum(p))
 		warning(message)
 	}
+	drop <- p < 10^(-10)
+	p <- p[!drop]
 	as.numeric(- p %*% log(p))
 }
 
@@ -75,19 +81,24 @@ H <- function(p){
 # SPATIAL RESPONSIBILITY FUNCTIONS
 # -----------------------------------------------------------------------------
 
-#' Compute the gradient of the squaring operation with respect to matrix entries
-#' Currently calculated numerically.
-#' @param sig the matrix at which to evaluate the gradient
-#' @return vector of derivatives, in row-wise, upper-triangular order.
-#' @export
 
+#' Compute the gradient of the squaring function for matrices.
+#' @param sig the input vector
+#' @return the jacobian
+#' @export
 square_grad <- function(sig){
-	f <- function(sig){
-		X <- sig %>% UT_ravel()
-		X %*% X %>% UT_unravel() # X is itself symmetric
+	S <- sig %>% UT_ravel()
+	# for each element in the lower triangle
+	f <- function(k){
+		M <- ((1:length(sig) == k)*1) %>% UT_ravel()
+		(M %*% t(S) + S %*% t(M)) %>% UT_unravel()
 	}
-	jacobian(func = f, x = sig)
+	1:length(sig) %>%
+		matrix %>%
+		apply(MARGIN = 1, FUN = f)
 }
+
+
 
 #' Compute the value of a normal distribution at point x with parameters v
 #' v must have length n*(n+3)/2, where n is the length of x
@@ -190,7 +201,7 @@ mvnorm.grad <- function(x, mu, sigma, log=FALSE) {
 
 	if (log) list(mu.grad=mu.grad, sigma.grad=sigma.grad) else
 	{
-		f <- dmvnorm(x, mean=mu, sigma=sigma, log=FALSE)
+		f <- dmvn(X = x, mu=mu, sigma=sigma)
 		list(mu.grad=mu.grad*f, sigma.grad=sigma.grad*f)
 	}
 }
@@ -242,6 +253,7 @@ Psi <- function(X, vec, dims){
 #' @param dims
 #' @return matrix, the gradient
 #' @export
+
 d_psi <- function(x, vec, dims){
 	par <- from_vec(vec, dims)
 	b <- par$b
