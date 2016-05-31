@@ -101,11 +101,10 @@ get_dims <- function(data, K){
 
 get_race_data <- function(state, counties){
 	library(acs, warn.conflicts = FALSE)
-	race <- acs::acs.fetch(endyear = 2010,
+	race <- acs::acs.fetch(endyear = 2012,
 						   geography = acs::geo.make(state = state, county = counties, tract = '*', block.group = '*'),
 						   table.number = 'B03002',
-						   col.names = "pretty",
-						   dataset = 'sf1')
+						   col.names = "pretty")
 
 	race <- cbind(data.frame(race@geography),
 					data.frame(race@estimate)) %>%
