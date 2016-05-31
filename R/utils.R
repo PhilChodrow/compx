@@ -3,7 +3,7 @@
 #' @name utils
 #' @docType package
 #'
-#' @import dplyr
+#' @import dplyr acs
 
 NULL
 
@@ -94,6 +94,62 @@ get_dims <- function(data, K){
 	J <- ncol(data$P)
 	list(n = n, I = I, J = J, K = K)
 }
+
+#' @param
+#' @param
+#' @export
+
+get_race_data <- function(state, counties){
+	library(acs, warn.conflicts = FALSE)
+	race <- acs::acs.fetch(endyear = 2010,
+						   geography = acs::geo.make(state = state, county = counties, tract = '*', block.group = '*'),
+						   table.number = 'B03002',
+						   col.names = "pretty",
+						   dataset = 'sf1')
+
+	race <- cbind(data.frame(race@geography),
+					data.frame(race@estimate)) %>%
+		tbl_df() %>%
+		mutate(GEOID = paste0(str_pad(state, 2, 'left', pad = '0'),
+							  str_pad(county, 3, 'left', pad = '0'),
+							  str_pad(tract, 6, 'left', pad = '0'),
+							  str_pad(blockgroup, 1, 'left', pad = '0')))
+
+	race$Hispanic <- race[names(race)[!grepl('.Not.Hispanic.or.Latino.',names(race))]] %>%
+		select(-(`NAME`:`Hispanic.or.Latino.by.Race..Hispanic.or.Latino.`)) %>%
+		select(-GEOID) %>%
+		rowSums()
+
+	others <- c('Hispanic.or.Latino.by.Race..Not.Hispanic.or.Latino..American.Indian.and.Alaska.Native.alone',
+				'Hispanic.or.Latino.by.Race..Not.Hispanic.or.Latino..Native.Hawaiian.and.Other.Pacific.Islander.alone',
+				'Hispanic.or.Latino.by.Race..Not.Hispanic.or.Latino..Some.other.race.alone',
+				'Hispanic.or.Latino.by.Race..Not.Hispanic.or.Latino..Two.or.more.races.',
+				'Hispanic.or.Latino.by.Race..Not.Hispanic.or.Latino..Two.or.more.races..Two.races.including.Some.other.race',
+				'Hispanic.or.Latino.by.Race..Not.Hispanic.or.Latino..Two.or.more.races..Two.races.excluding.Some.other.race..and.three.or.more.races')
+
+	race$Other <- race[others] %>% rowSums()
+
+	race <- race %>%
+		select(Hispanic, Other,
+			   White = Hispanic.or.Latino.by.Race..Not.Hispanic.or.Latino..White.alone,
+			   Black = Hispanic.or.Latino.by.Race..Not.Hispanic.or.Latino..Black.or.African.American.alone,
+			   Asian = Hispanic.or.Latino.by.Race..Not.Hispanic.or.Latino..Asian.alone,
+			   GEOID)
+
+	tracts <- tigris::block_groups(state = state, county = counties, cb=TRUE)
+	tracts <- tigris::geo_join(tracts, race, "GEOID", "GEOID")
+
+	tracts@data <- tracts@data %>%
+		mutate(name = row.names(.),
+			   total = Hispanic + Other + White + Black + Asian)
+
+	tracts <- tracts[!is.na(tracts@data$total),]
+	tracts <- tracts[tracts@data$total > 0,]
+
+	return(tracts)
+}
+
+
 
 
 

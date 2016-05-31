@@ -12,7 +12,8 @@ Imports:
     leaflet,
     stringr,
     mvtnorm,
-    matrixcalc
+    matrixcalc,
+    numDeriv
 License: CC0
 LazyData: true
 VignetteBuilder: knitr
