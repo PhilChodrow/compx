@@ -1,9 +1,16 @@
 #' cluster
 #' @name cluster
 #' @docType package
-#' @import rgdal dplyr rgeos Matrix
+#' @import rgdal dplyr rgeos Matrix reshape2
 
 NULL
+
+
+
+
+
+
+
 
 #' @export
 update_adj <- function(adj, i, j){
@@ -83,14 +90,28 @@ new_dists <- function(df, i, adj){
 #' @export
 info_clust <- function(spdf, columns, spatial = TRUE){
 
+	# initialize control structures
 	df <- spdf@data[,columns] %>% tbl_df
-	if(spatial){
-		adj <- (gRelate(spdf, byid = TRUE, pattern = '****1****') * 1) %>% Matrix(sparse = TRUE)
-	} else{
-		adj <- 1 %>% matrix(nrow(df), nrow(df))
-	}
+	control <- (gRelate(spdf, byid = TRUE, pattern = '****1****')) %>%
+		melt() %>%
+		tbl_df()
+	names(control) <- c('i', 'j', 'adjacent')
+	control <- control %>% mutate(i = i+1, j = j+1)
 
-	dists <- make_dist(df, races, adj)
+	p_Y <- colSums(df) %>% simplex_normalize()
+	N <- sum(df)
+
+	loss <- function(i, j, adjacent){
+		if(adjacent & i != j){
+			info_loss(df, p_Y, N, i, j)
+		}else{
+			NA
+		}
+	}
+	control$dist <- mapply(FUN = loss, control$i, control$j, control$adjacent)
+
+	# update adjacency
+	# update dists
 
 	a <- list()
 	a$merge <- matrix(0, 1, 2)
@@ -98,8 +119,8 @@ info_clust <- function(spdf, columns, spatial = TRUE){
 	a$height <- numeric()
 	a$order <- 1:(nrow(df))
 	a$labels <- 1:(nrow(df))
-	# main loop
 	merge_list <- list()
+	# main loop
 	for(i in 1:nrow(df)){
 		merge_list[[i]] <- -i
 	}
@@ -107,43 +128,51 @@ info_clust <- function(spdf, columns, spatial = TRUE){
 	x <- numeric()
 	N = nrow(df) - 1
 	for(k in 1:N){ # alright for a first draft, but we need to make sure that this eventually gets down to 1.
-		print(pryr::object_size(adj))
-		min_val <- min(dists, na.rm = T)
-		if(is.infinite(min_val)){
-			i <- 1
-			j <- 2
+		print(pryr::object_size(control))
+
+		update <- control %>%
+			filter(dist == min(dist, na.rm = T), i != j) %>%
+			head(1)
+
+		if(nrow(update) == 0){
+			eye <- 1
+			jay <- 2
 
 			height <- info_loss(df = df,
 					  colSums(df) / sum(colSums(df)),
 					  N = sum(df),
-					  i = i,
-					  j = j)
+					  i = eye,
+					  j = jay)
 
 			a$height <- c(a$height, height)
 		}else{
-			to_combine <- which(dists == min_val, arr.ind = T)[1,]
-			i <- min(to_combine)
-			j <- max(to_combine)
-			a$height <- c(a$height, min_val)
+			eye <- min(update$i, update$j)
+			jay <- max(update$i, update$j)
+			a$height <- c(a$height, update$dist)
 		}
-		a$merge <- rbind(a$merge, c(merge_list[[i]], merge_list[[j]]))
-		merge_list[[i]] <- k
-		merge_list <- merge_list[-j]
 
+		a$merge <- rbind(a$merge, c(merge_list[[eye]], merge_list[[jay]]))
+		merge_list[[eye]] <- k
+		# merge_list <- merge_list[-jay]
 
-		adj <- update_adj(adj, i, j)
+		# df update
 		df <- update_df(df, i, j)
-		dists <- dists[-j, -j]
-		if(k == N){
-			dists <- as.matrix(dists)
-		}
-		new <- new_dists(df, i, adj)
-		dists[i, adj[i,] > 0] <- new
-		dists[adj[,i] > 0, i] <- new
-		diag(dists) <- NA
-		# x[k] <- mutual_info(df)
-	}
 
+		# adjacency update
+		control$adjacent[control$i == eye] <- control$adjacent[control$i == eye] |
+			control$adjacent[control$i == jay]
+
+		control <- control %>% filter(i != jay,
+									  j != jay,
+									  i != j)
+
+		# dists update
+		to_update <- control %>% filter(control$i == eye)
+		control$dist[control$i == eye] <- mapply(FUN = loss,
+												 to_update$i,
+												 to_update$j,
+												 to_update$adjacent)
+	}
 	a$height <- cumsum(a$height)
 	class(a) <- 'hclust'
 	a
