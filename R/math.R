@@ -5,81 +5,20 @@
 
 NULL
 
-# -----------------------------------------------------------------------------
-# INFORMATION GEOMETRY
-# -----------------------------------------------------------------------------
-
-#' Check whether a vector is an element of the probability simplex
-#' @param p vector the vector to check
-#' @param allow_zero boolean whether to allow elements with zero entries (boundary of simplex)
-#' @return boolean whether p is a valid probability distribution
-#' @export
-
-simplex_check <- function(p, allow_zero = TRUE){
-	if(min(is.na(p)) == 1) return(FALSE)
-	nonneg <- ifelse(allow_zero, min(p >= 0), min(p > 0))
-	normed <- abs(sum(p) - 1) < .1 # numerical tolerance
-	nonneg & normed
-}
-
-#' Normalize a nonnegative vector so that it lies in the probability simplex
-#' @param p vector the vector
-#' @export
-
-simplex_normalize <- function(p){
-	if (min(p >= 0) == 0){
-		stop("Vector has negative entries")
-	}
-	normed <- p / sum(p)
-	if (min(p > 0) == 0){
-		warning('p lies on simplex boundary')
-	}
-	normed
-}
-
-#' Find the Kullback-Leibler divergence of two empirical distributions.
-#' @param p the 'true' distribution
-#' @param q the estimated distribution
-#' @return numeric the KL divergence between p and q
-#' @export
-
-DKL <- function(p,q){
-	if(!is.numeric(p) | !is.numeric(q)){
-		return(NaN)
-	}
-
-	if(!simplex_check(p) | !simplex_check(q)){
-		message <- paste0('p or q are not on the simplex: sum(p) = ', sum(p), ' and sum(q) = ', sum(q))
-		warning(message)
-	}
-	if(length(p) != length(q)){
-		stop('Distribution alphabets are different size')
-	}
-
-	drop <- p < 10^(-10)
-	p <- p[!drop]
-	q <- q[!drop]
-
-	return(as.numeric(p %*% log(p/q)))
-}
-
-#' Find the entropy of a distribution
-#' @export
-
-H <- function(p){
-	if(!simplex_check(p)){
-		message <- paste0('p is not on the simplex: sum(p) = ', sum(p))
-		warning(message)
-	}
-	drop <- p < 10^(-10)
-	p <- p[!drop]
-	as.numeric(- p %*% log(p))
-}
 
 
 # -----------------------------------------------------------------------------
 # SPATIAL RESPONSIBILITY FUNCTIONS
 # -----------------------------------------------------------------------------
+
+
+
+square_grad_term <- function(k, S){
+	n <- dim(S)[1]*(dim(S)[1] + 1) / 2
+
+	M <- ((1:n == k)*1) %>% UT_ravel()
+	(M %*% t(S) + S %*% t(M)) %>% UT_unravel()
+}
 
 
 #' Compute the gradient of the squaring function for matrices.
@@ -89,13 +28,10 @@ H <- function(p){
 square_grad <- function(sig){
 	S <- sig %>% UT_ravel()
 	# for each element in the lower triangle
-	f <- function(k){
-		M <- ((1:length(sig) == k)*1) %>% UT_ravel()
-		(M %*% t(S) + S %*% t(M)) %>% UT_unravel()
-	}
+
 	1:length(sig) %>%
 		matrix %>%
-		apply(MARGIN = 1, FUN = f)
+		apply(MARGIN = 1, FUN = square_grad_term, S = S)
 }
 
 
@@ -182,6 +118,8 @@ d_Lambda <- function(x, V){
 	split(V, ceiling(seq_along(V)/l)) %>%
 		lapply(d_lambda, x = x) %>%
 		do.call(adiag, .)
+
+
 }
 
 #' Compute the gradient of a normal distribution with respect to its parameters.
@@ -292,7 +230,7 @@ obj_constructor <- function(data, dims){
 
 		1:dim(data$P)[1] %>%
 			matrix %>%
-			apply(1, function(i) DKL(data$P[i,], estimates[i,])) %>%
+			apply(1, function(i) euc(data$P[i,], estimates[i,])) %>%
 			sum
 	}
 

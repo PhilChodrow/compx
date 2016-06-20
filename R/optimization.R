@@ -80,7 +80,8 @@ warm_start <- function(data, dims){
 	sig <- 1:dims$K %>% # construct K identical, diagonal matrices
 		matrix %>%
 		apply(1, function(i) UT_unravel(diag(d, dims$n))) %>%
-		matrix
+		t
+
 
 	# compute plausible starting values for component distributions Q.
 

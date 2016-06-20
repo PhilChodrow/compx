@@ -54,9 +54,7 @@ v2p <- function(v){
 #' @export
 
 UT_unravel <- function(M){
-	if(!all.equal(M, t(M))){
-		warning("Warning: matrix M is not symmetric, information lost")
-	}
+	# consider adding a test for matrix symmetry in here, preferably a fast one.
 	M[lower.tri(t(M), diag = TRUE)]
 }
 #' Find the dimensions of a matrix for a given size of the upper-triangular part
@@ -81,9 +79,13 @@ UT_ravel <- function(v){
 		return(matrix(v))
 	}
 	n <- find_n(v, mean = FALSE)
-	x <- matrix(0, n, n)
-	x[lower.tri(x, diag = TRUE)] <- v
-	x <- t(x) + x - diag(diag(x))
+	# x <- matrix(0, n, n)
+	# x[lower.tri(x, diag = TRUE)] <- v
+	# x <- t(x) + x - diag(diag(x))
+	# x
+
+	x <- matrix(0, n,n)
+	x[row(x) >= col(x) ] <- v
 	x
 }
 

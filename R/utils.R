@@ -3,7 +3,7 @@
 #' @name utils
 #' @docType package
 #'
-#' @import dplyr acs
+#' @import dplyr acs readr tidyr stringr
 
 NULL
 
@@ -21,134 +21,149 @@ NULL
 #' @importFrom stringr str_pad
 #' @export
 
-get_census_data <- function(states, counties, table_num, end_year=2012, span=5){
+get_census_data <- function(state, table_nums = c("B15003", 'B03002', 'C24010'), lookup_table = NULL, end_year=2014, span=5){
 	library(acs, warn.conflicts = FALSE)
+
+	counties <- acs.fetch(geography=geo.make(state=state, county="*"),
+						  endyear = 2014,
+						  table.number="B01003")
+	counties <- as.numeric(geography(counties)[[3]])
+
+	polys <- tigris::block_groups(state = state, county = counties, cb=TRUE)
+
+	for(table_num in table_nums){
 		data <- acs::acs.fetch(endyear = end_year,
-						   span = span,
-						   geography = acs::geo.make(state = states, county = counties, tract = '*', block.group = '*'),
-						   table.number = table_num,
-						   col.names = "pretty")
+							   span = span,
+							   geography = acs::geo.make(state = state,
+							   						  county = counties,
+							   						  tract = '*',
+							   						  block.group = '*'),
+							   table.number = table_num,
+							   col.names = "pretty")
 
-	polys <- tigris::block_groups(state = states, county = counties, cb=TRUE)
+		df <- data.frame(data@estimate) %>%
+			tbl_df
+		colnames(df) <- colnames(data@estimate)
 
-	df <- cbind(data.frame(data@geography),
-				data.frame(data@estimate)) %>%
-		tbl_df() %>%
-		mutate(GEOID = paste0(str_pad(state, 2, 'left', pad = '0'),
-									 str_pad(county, 3, 'left', pad = '0'),
-									 str_pad(tract, 6, 'left', pad = '0'),
-									 str_pad(blockgroup, 1, 'left', pad = '0')))
+		df <- cbind(df, data@geography) %>%
+			tbl_df
 
-	df_merged <- tigris::geo_join(polys, df, "GEOID", "GEOID")
+		df <- df %>%
+			gather(key = column, value = n, -(NAME:blockgroup)) %>%
+			left_join(lookup, by = c('column' = 'old')) %>%
+			filter(new != 'DELETE') %>%
+			group_by(NAME, new, state, county, tract, blockgroup) %>%
+			summarise(n = sum(n)) %>%
+			spread(new, n, fill = 0) %>%
+			mutate(GEOID = paste0(str_pad(state, 2, 'left', pad = '0'),
+								  str_pad(county, 3, 'left', pad = '0'),
+								  str_pad(tract, 6, 'left', pad = '0'),
+								  str_pad(blockgroup, 1, 'left', pad = '0'))) %>%
+			ungroup() %>%
+			select(-NAME, -state, -county, -tract, -blockgroup)
 
-	return(df_merged)
-}
-
-#' Get the centroids for a bunch of spatial data.
-#' @param data the SpatialPolygon data for which to compute centroids
-#' @return a matrix of centroid coordinates
-#' @export
-
-get_centroids <- function(data){
-	centroids <- rgeos::gCentroid(data,byid=TRUE)
-	centroids <- centroids@coords
-	colnames(centroids) <- c('lon', 'lat')
-	return(centroids)
-}
-
-#' Get matching df for a bunch of spatial data
-#' @param data the SpatialPolygon data for which to compute centroids
-#' @return df the complete set of data corresponding to the SpatialPolygons, keyed by ID to match with them.
-#' @export
-
-get_table <- function(data){
-	exclude <- c('GEOID', 'AWATER', 'COUNTYFP', 'TRACTCE', 'BLKGRPCE', 'AFFGEOID', 'NAME', 'LSAD', 'ALAND','NAME.1', 'state', 'county', 'tract', 'blockgroup', 'GEOID.1', 'STATEFP')
-	tab <- data@data
-	tab <- tab[,(!names(tab) %in% exclude)]
-	tab <- tab[,!(grepl('Total', names(tab)))]
-	return(tab)
-}
-
-#' @export
-format_data <- function(acs_data, omit_0 = F){
-	P <- acs_data %>%
-		get_table() %>%
-		as.matrix()
-	P <- P + 1
-	P <- P %>%
-		t %>%
-		scale(., center=FALSE, scale = colSums(.)) %>%
-		t
-	if(omit_0){
-		P <- na.omit(P)
+		polys@data <- left_join(polys@data, df)
 	}
-	X <- get_centroids(acs_data)
-	X <- X[row.names(P),]
-	data <- list(X = X, P = P)
+	return(polys)
 }
 
+
 #' @export
-get_dims <- function(data, K){
-	n <- ncol(data$X)
-	I <- nrow(data$P)
-	J <- ncol(data$P)
-	list(n = n, I = I, J = J, K = K)
+checkerboard_illustration <- function(){
+	expand.grid(x = 1:8, y = 1:8) %>%
+		mutate(`(a)` = 1,
+			   `(b)` = .5,
+			   `(c)` = (x > 4)*1,
+			   `(d)` = (x + y) %% 2) %>%
+		gather(key = model, value = p, -x, -y) %>%
+		ggplot(aes(x = x, y = y)) +
+		theme_minimal() +
+		theme(axis.ticks = element_blank(),
+			  axis.text.x = element_blank(),
+			  axis.text.y = element_blank(),
+			  panel.background = element_rect(),
+			  panel.grid.major = element_line(size = 0),
+			  panel.grid.minor = element_line(size = 0),
+			  plot.margin=unit(c(0,0,0,0),"mm")) +
+		geom_tile(aes(fill = p)) +
+		scale_fill_continuous(low = 'white', high = 'black ', limits=c(0,1)) +
+		facet_grid(~model) +
+		xlab('') +
+		ylab('') +
+		guides(fill=FALSE)
 }
 
-#' @param
-#' @param
+
 #' @export
+method_illustration <- function(city, radius_km = 1){
 
-get_race_data <- function(state, counties){
-	library(acs, warn.conflicts = FALSE)
-	race <- acs::acs.fetch(endyear = 2012,
-						   geography = acs::geo.make(state = state, county = counties, tract = '*', block.group = '*'),
-						   table.number = 'B03002',
-						   col.names = "pretty")
-
-	race <- cbind(data.frame(race@geography),
-					data.frame(race@estimate)) %>%
-		tbl_df() %>%
-		mutate(GEOID = paste0(str_pad(state, 2, 'left', pad = '0'),
-							  str_pad(county, 3, 'left', pad = '0'),
-							  str_pad(tract, 6, 'left', pad = '0'),
-							  str_pad(blockgroup, 1, 'left', pad = '0')))
-
-	race$Hispanic <- race[names(race)[!grepl('.Not.Hispanic.or.Latino.',names(race))]] %>%
-		select(-(`NAME`:`Hispanic.or.Latino.by.Race..Hispanic.or.Latino.`)) %>%
-		select(-GEOID) %>%
-		rowSums()
-
-	others <- c('Hispanic.or.Latino.by.Race..Not.Hispanic.or.Latino..American.Indian.and.Alaska.Native.alone',
-				'Hispanic.or.Latino.by.Race..Not.Hispanic.or.Latino..Native.Hawaiian.and.Other.Pacific.Islander.alone',
-				'Hispanic.or.Latino.by.Race..Not.Hispanic.or.Latino..Some.other.race.alone',
-				'Hispanic.or.Latino.by.Race..Not.Hispanic.or.Latino..Two.or.more.races.',
-				'Hispanic.or.Latino.by.Race..Not.Hispanic.or.Latino..Two.or.more.races..Two.races.including.Some.other.race',
-				'Hispanic.or.Latino.by.Race..Not.Hispanic.or.Latino..Two.or.more.races..Two.races.excluding.Some.other.race..and.three.or.more.races')
-
-	race$Other <- race[others] %>% rowSums()
-
-	race <- race %>%
-		select(Hispanic, Other,
-			   White = Hispanic.or.Latino.by.Race..Not.Hispanic.or.Latino..White.alone,
-			   Black = Hispanic.or.Latino.by.Race..Not.Hispanic.or.Latino..Black.or.African.American.alone,
-			   Asian = Hispanic.or.Latino.by.Race..Not.Hispanic.or.Latino..Asian.alone,
-			   GEOID)
-
-	tracts <- tigris::block_groups(state = state, county = counties, cb=TRUE)
-	tracts <- tigris::geo_join(tracts, race, "GEOID", "GEOID")
-
-	tracts@data <- tracts@data %>%
-		mutate(name = row.names(.),
-			   total = Hispanic + Other + White + Black + Asian)
-
-	tracts <- tracts[!is.na(tracts@data$total),]
+	races <- c('Black', 'Hispanic', 'Asian', 'White', 'Other')
+	tracts <- readOGR(dsn = paste0('cities/',city), layer = 'geo', verbose = FALSE)
 	tracts <- tracts[tracts@data$total > 0,]
 
-	return(tracts)
+	radius = 1/sqrt(85 * 111) * radius_km # (roughly 1 km after lat-lon conversion)
+
+	xx = spsample(tracts, type="hexagonal", cellsize=radius)
+	xxpl = HexPoints2SpatialPolygons(xx)
+
+	# Define information measures on the grid
+	h <- function(i){
+		window <- tracts[xxpl[i,],]@data[,c(races, 'total', 'area')]
+		window <- window / window$area # total becomes density
+		c(mean(window$total), 4 * mutual_info(window[,races])/radius_km^2) # returns estimated density and mutual info
+	}
+
+	# Compute measures on the grid and collect as df
+	df <- 1:length(xxpl) %>%
+		as.matrix() %>%
+		apply(MARGIN = 1, FUN = h) %>%
+		t %>%
+		as.data.frame()
+	names(df) <- c('density', 'info')
+	df$id <- paste0('ID', row.names(df))
+
+	hexgrid <- fortify(xxpl) %>%
+		left_join(df, by = c('id' = 'id'))
+
+	bbox <- c(min(hexgrid$long), min(hexgrid$lat), max(hexgrid$long), max(hexgrid$lat))
+	map <- get_map(location = bbox, maptype = 'terrain-background',)
+
+	p <- ggmap(map,darken = .5)
+	p <- p +
+		geom_polygon(data = hexgrid, aes(x = long, y = lat, group = group, fill = info), alpha = .8) +
+		scale_fill_continuous(low = 'white', high = 'steelblue', name= expression(J[Y](x)), limits = c(0, log(length(races)) / (radius_km^2))) +
+		theme(axis.ticks = element_blank(),
+			  axis.text.x = element_blank(),
+			  axis.text.y = element_blank()) +
+		xlab('') +
+		ylab('') +
+		theme(legend.justification=c(.8,0),
+			  legend.position=c(1,0),
+			  legend.background = element_rect(fill = alpha('blue', 0)),
+			  legend.title = element_text(colour="white"),
+			  legend.text = element_text(colour="white"),
+			  legend.key.size = unit(2, "mm"),
+			  legend.text = element_text(size = rel(.1))) +
+		ggtitle(paste0(city, ': Mean = ', round(weighted.mean(df$info, df$density), 2)))
+
 }
 
 
+#' @export
+city_list <- function(file){
+	cities <- read_csv(file)
 
+	cities <- cities %>%
+		separate(name, c('name','state'), sep = ',') %>%
+		mutate(state = substr(county_name, start  = nchar(county_name) - 1, stop  = nchar(county_name)),
+			   county_num = as.integer(substr(county_num, start = 3, stop = 5))) %>%
+		select(-county_name)
 
-
+	cities <- cities %>% aggregate(county_num ~ name + state + code, c, data = .) %>%
+		tbl_df %>%
+		left_join(cities[,c('name', 'state')]) %>%
+		filter(!duplicated(x = .[,c('code', 'state')])) %>%
+		mutate(state = as.character(state),
+			   short_name = word(name, sep = '-'))
+	cities
+}

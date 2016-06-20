@@ -12,8 +12,8 @@ NULL
 inf_constructor <- function(pars){
 	influence <- function(x1, x2){
 		x <- c(x1, x2)
-		densities <- normal_vec(x = x, pars = pars)
-		as.numeric(pars$C %*% densities)
+		densities <- Lambda(x, pars$V)
+		as.numeric(pars$b %*% densities)
 	}
 }
 
@@ -39,6 +39,10 @@ spatial_plot <- function(data, pars, grid_density = 50){
 	influence <- inf_constructor(pars)
 	gg$z <- mapply(influence, gg$x, gg$y)
 
+	centroids <- data.frame(lon = pars$V[seq(1, length(pars$V), 5)],
+							lat = pars$V[seq(2, length(pars$V), 5)])
+
 	p <- ggplot(gg, aes(x = x, y = y, z = z)) + stat_contour(aes(color = ..level..))
-	p + geom_point(data = X, aes(x = lon, y = lat, z = 0))
+	p <- p + geom_point(data = X, aes(x = lon, y = lat, z = 0))
+	p + geom_point(data = centroids, aes(x = lon, y = lat, z = 0), size = 2, color = 'red')
 }

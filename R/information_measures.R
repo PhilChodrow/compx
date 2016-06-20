@@ -1,5 +1,5 @@
-#' math
-#' @name math
+#' info
+#' @name info
 #' @docType package
 #' @import dplyr tidyr
 
@@ -30,10 +30,11 @@ simplex_normalize <- function(p){
 	if (min(p >= 0) == 0){
 		stop("Vector has negative entries")
 	}
+
 	normed <- p / sum(p)
-	if (min(p > 0) == 0){
-		warning('p lies on simplex boundary')
-	}
+	# if (min(p > 0) == 0){
+	# 	warning('p lies on simplex boundary')
+	# }
 	normed
 }
 
@@ -43,15 +44,17 @@ simplex_normalize <- function(p){
 #' @return numeric the KL divergence between p and q
 #' @export
 
-DKL <- function(p,q){
-	if(!is.numeric(p) | !is.numeric(q)){
-		return(NaN)
+DKL <- function(p,q, check = FALSE){
+	# if(!is.numeric(p) | !is.numeric(q)){
+	# 	return(NaN)
+	# }
+	if(check){
+		if(!simplex_check(p) | !simplex_check(q)){
+			message <- paste0('p or q are not on the simplex: sum(p) = ', sum(p), ' and sum(q) = ', sum(q))
+			warning(message)
+		}
 	}
 
-	if(!simplex_check(p) | !simplex_check(q)){
-		message <- paste0('p or q are not on the simplex: sum(p) = ', sum(p), ' and sum(q) = ', sum(q))
-		warning(message)
-	}
 	if(length(p) != length(q)){
 		stop('Distribution alphabets are different size')
 	}
@@ -79,6 +82,12 @@ H <- function(p){
 	drop <- p < 10^(-10)
 	p <- p[!drop]
 	as.numeric(- p %*% log(p))
+}
+
+#' @export
+
+H_B <- function(proportion){
+	-(proportion * log(proportion) + (1-proportion) * log(1-proportion))
 }
 
 
@@ -133,19 +142,22 @@ mutual_info <- function(data, group_col = NULL){
 
 	if(nrow(data) < 2) return(0) # would NA be better?
 
-
 	distributions <- compute_distributions(data, group_col)
 
-	f <- function(i){
-		DKL(distributions$joint[i,] / sum(distributions$joint[i,]),
-			distributions$category)
-	}
+	independent <- distributions$group %*% t(distributions$category)
+	(distributions$joint * log(distributions$joint / independent)) %>%
+		sum(na.rm = T)
 
-	divs <- 1:length(distributions$group) %>%
-		as.matrix() %>%
-		apply(MARGIN = 1,
-			  FUN = f)
-	divs %*% distributions$group %>% c
+	# f <- function(i){
+	# 	DKL(distributions$joint[i,] / sum(distributions$joint[i,]),
+	# 		distributions$category)
+	# }
+	#
+	# divs <- 1:length(distributions$group) %>%
+	# 	as.matrix() %>%
+	# 	apply(MARGIN = 1,
+	# 		  FUN = f)
+	# divs %*% distributions$group %>% c
 }
 
 
