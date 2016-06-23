@@ -13,7 +13,8 @@ Imports:
     stringr,
     mvtnorm,
     matrixcalc,
-    numDeriv
+    numDeriv,
+    data.table
 License: CC0
 LazyData: true
 VignetteBuilder: knitr

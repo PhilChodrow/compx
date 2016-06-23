@@ -1,33 +1,60 @@
 #' cluster
 #' @name cluster
 #' @docType package
-#' @import rgdal dplyr rgeos Matrix reshape2
+#' @import rgdal dplyr rgeos Matrix reshape2 data.table
 
 NULL
 
-
-
-
-
-
-
-
+#' Compute constrained, greedy information-maximizing agglomerative clustering on a contingency table.
+#' @param df a data frame in which each row is a separate observation and each column a category.
+#' @param constraint a matrix of constraints. Let constraint be a matrix of TRUE to do unconstrained clustering.
+#' @return a an object of class hclust
 #' @export
-update_adj <- function(adj, i, j){
-	eye = min(i,j); jay = max(i,j)
-	adj[eye,] <- adj[eye,] + adj[jay,]
-	adj[,eye] <- adj[,eye] + adj[,jay]
-	adj <- adj[-jay,-jay]
-	adj <- (adj > 0) * 1
-	if(length(adj) == 1){
-		adj <- as.matrix(adj)
+
+info_clust <- function(df, constraint){
+	k <- 1
+	a <- empty_hclust(nrow(df))
+	merge_lookup <- empty_merge_lookup(nrow(df))
+	all_merges <- data_frame(i = integer(),
+							 j = integer(),
+							 loss = numeric())
+	while(nrow(df) > 1){
+		merge_list <- make_merge_list(df, constraint)
+		constraint <- update_constraint(constraint, merge_list)
+		if(nrow(merge_list) != 0){
+			df <- update_df(df, merge_list)
+			all_merges <- rbind(all_merges,
+								data.frame(i = unlist(merge_lookup[merge_list$i]),
+										   j = unlist(merge_lookup[merge_list$j]),
+										   loss = merge_list$loss))
+			for(m in 1:nrow(merge_list)){
+				merge_lookup[[merge_list[m,1]]] <- k # this seems right?
+				k <- k + 1
+			}
+			merge_lookup[merge_list[,2]] <- NULL
+		}
+		print(c(nrow(df), nrow(constraint), length(merge_lookup)))
 	}
-	adj
+	# this needs some work, TBD
+	all_merges <- all_merges %>% sort_merges()
+	a$height <- all_merges$loss
+	a$height <- cumsum(a$height)
+	a$merge <- as.matrix(all_merges[,c('i','j')])
+	class(a) <- 'hclust'
+	a
 }
 
 
-#' @export
-info_loss <- function(df, p_Y, N, i, j){
+
+#' Compute the information loss associated with merging two rows of a data frame.
+#' @param df a data frame in which each column represents a category and each row the observed counts in that category.
+#' @param i the first row to merge
+#' @param i the second row to merge
+
+info_loss <- function(df, i, j){
+
+	p_Y <- colSums(df) %>% simplex_normalize()
+	N <- sum(df)
 
 	q_i <- as.numeric(df[i,])
 	q_j <- as.numeric(df[j,])
@@ -50,131 +77,154 @@ info_loss <- function(df, p_Y, N, i, j){
 
 }
 
-#' @export
-make_dist <- function(df, columns, adj){
-	p_Y <- colSums(df) %>% simplex_normalize()
-	N <- sum(df)
-	indices <- which(adj > 0, arr.ind = T)
+#' Make the list of merges for each outer iteration
+#' @param df the dataframe at this stage of the algorithm.
+#' @param constraint the constraint at this stage of the algorithm
+#' @return merge_list a data frame with columns i and j (to be merged) and loss, the information loss associated with each.
 
-	dists <- matrix(nrow = nrow(df), ncol = nrow(df))
-	for(k in 1:nrow(indices)){
-		if(indices[k,1] != indices[k,2]){
-			dists[indices[k,1],indices[k,2]] <- info_loss(df,
-														  p_Y,
-														  N,
-														  indices[k,1],
-														  indices[k,2])
+make_merge_list <- function(df, constraint){
+	# each node needs to be merged no more than once in each outer iteration.
+
+	df <- df %>% mutate(cluster = row_number())
+
+	merge_list <- data_frame(i = integer(),
+							 j = integer(),
+							 loss = numeric())
+
+	find_smallest <- function(i){
+		candidates <- which(constraint[i,] == T)
+		candidates <- candidates[candidates != i]
+		losses <- candidates %>%
+			as.matrix() %>%
+			apply(MARGIN = 1, FUN = function(j) info_loss(df, i, j))
+
+		return(c(candidates[which.min(losses)], min(losses)))
+	}
+
+	# main loop
+	for(i in df$cluster){
+		if(!(i %in% c(merge_list$i,merge_list$j))){
+			min_jay <- find_smallest(i)[1]
+			if(!(min_jay %in% c(merge_list$i,merge_list$j))){
+				the_min <- find_smallest(min_jay)
+				min_eye <- the_min[1]
+				if(i == min_eye){
+					merge_list <- rbind(merge_list,
+										data.frame(i = min_eye, j = min_jay, loss = the_min[2]))
+				}
+			}
 		}
 	}
-	dists
+	merge_list
 }
 
-#' @export
-update_df <- function(df, i, j){
-	eye = min(i,j); jay = max(i,j)
-	new_df <- df
-	new_df[eye,] <- new_df[eye,] + new_df[jay,]
-	new_df[-jay,]
-}
+#' Update the constraint matrix using the current merge list. Note that, if no merges are possible, then the constraint matrix inserts a TRUE at positions [1,2] and [2,1]. In the geographical context, this scenario corresponds to disconnected components on the map, and the constraint matrix declares two of them to be connected arbitrarily.
+#' @param constraint the current state of the constraint matrix.
+#' @param merge_list the list of observations to be merged.
+#' @return matrix the updated constraint matrix
 
-#' @export
-new_dists <- function(df, i, adj){
-	p_Y <- colSums(df) %>% simplex_normalize()
-	N <- sum(df)
-	which(adj[i,] > 0) %>%
-		mapply(FUN = function(j) info_loss(df, p_Y, N, i, j), .)
-}
+update_constraint <- function(constraint, merge_list){
 
-
-#' This is getting there, but the resulting tree cannot be cut or converted with as.dendrogram, though it can be plotted
-#' @export
-info_clust <- function(spdf, columns, spatial = TRUE){
-
-	# initialize control structures
-	df <- spdf@data[,columns] %>% tbl_df
-	control <- (gRelate(spdf, byid = TRUE, pattern = '****1****')) %>%
-		melt() %>%
-		tbl_df()
-	names(control) <- c('i', 'j', 'adjacent')
-	control <- control %>% mutate(i = i+1, j = j+1)
-
-	p_Y <- colSums(df) %>% simplex_normalize()
-	N <- sum(df)
-
-	loss <- function(i, j, adjacent){
-		if(adjacent & i != j){
-			info_loss(df, p_Y, N, i, j)
-		}else{
-			NA
-		}
+	if(nrow(merge_list) == 0){
+		constraint[1,2] <- T
+		constraint[2,1] <- T
+		return(constraint)
+	}else{
+		constraint[merge_list[,1],] <- constraint[merge_list[,1],] + constraint[merge_list[,2],]
+		constraint[,merge_list[,1]] <- constraint[,merge_list[,1]] + constraint[,merge_list[,2]]
+		as.matrix((constraint[-merge_list[,2], -merge_list[,2]] > 0) * 1)
 	}
-	control$dist <- mapply(FUN = loss, control$i, control$j, control$adjacent)
+}
 
-	# update adjacency
-	# update dists
+#' Update the data frame of observations using the current merge list.
+#' @param df the current state of the df
+#' @param merge_list the list of observations to be merged.
+#' @return df the updated data frame
+update_df <- function(df, merge_list){
 
+	df[merge_list[,1],] <- df[merge_list[,1],] + df[merge_list[,2],]
+	df[-merge_list[,2],]
+
+}
+
+# ------------------------------------------------------------------------------
+# HELPERS
+# ------------------------------------------------------------------------------
+
+#' Initialize an empty hclust object to be populated by the loop in info_clust
+#' @param n the number of leaves
+#' @return a a list with entries appropriate for conversion to an hclust object.
+empty_hclust <- function(n){
 	a <- list()
 	a$merge <- matrix(0, 1, 2)
 	a$merge <- a$merge[-1,]
 	a$height <- numeric()
-	a$order <- 1:(nrow(df))
-	a$labels <- 1:(nrow(df))
-	merge_list <- list()
-	# main loop
-	for(i in 1:nrow(df)){
-		merge_list[[i]] <- -i
-	}
-
-	x <- numeric()
-	N = nrow(df) - 1
-	for(k in 1:N){ # alright for a first draft, but we need to make sure that this eventually gets down to 1.
-		print(pryr::object_size(control))
-
-		update <- control %>%
-			filter(dist == min(dist, na.rm = T), i != j) %>%
-			head(1)
-
-		if(nrow(update) == 0){
-			eye <- 1
-			jay <- 2
-
-			height <- info_loss(df = df,
-					  colSums(df) / sum(colSums(df)),
-					  N = sum(df),
-					  i = eye,
-					  j = jay)
-
-			a$height <- c(a$height, height)
-		}else{
-			eye <- min(update$i, update$j)
-			jay <- max(update$i, update$j)
-			a$height <- c(a$height, update$dist)
-		}
-
-		a$merge <- rbind(a$merge, c(merge_list[[eye]], merge_list[[jay]]))
-		merge_list[[eye]] <- k
-		# merge_list <- merge_list[-jay]
-
-		# df update
-		df <- update_df(df, i, j)
-
-		# adjacency update
-		control$adjacent[control$i == eye] <- control$adjacent[control$i == eye] |
-			control$adjacent[control$i == jay]
-
-		control <- control %>% filter(i != jay,
-									  j != jay,
-									  i != j)
-
-		# dists update
-		to_update <- control %>% filter(control$i == eye)
-		control$dist[control$i == eye] <- mapply(FUN = loss,
-												 to_update$i,
-												 to_update$j,
-												 to_update$adjacent)
-	}
-	a$height <- cumsum(a$height)
-	class(a) <- 'hclust'
+	a$order <- 1:n
+	a$labels <- 1:n
 	a
+}
+
+#' Create an empty merge lookup for use populating a$merge
+#' @param n the number of leaves
+#' @return merge_lookup a list
+empty_merge_lookup <- function(n){
+
+	merge_lookup <- list()
+	for(i in 1:n){
+		merge_lookup[[i]] <- -i
+	}
+	merge_lookup
+}
+
+
+
+#' Sort the full list of merges produced in the main loop to ensure the greediness of the algorithm. While this version of agglomerative clustering is fast, the merge list generated is not on its own greedy. We can greedify the algorithm using the sorting procedure below, ensuring that each entry of a$height is minimal given the previous merges. *Sorting the list does not change the cluster topology*, just the order of the merges in the tree.
+#' @param merges the data frame of merges
+#' @return sorted the sorted data frame of merges
+
+sort_merges <- function(merges){
+
+	# merges <- merges %>% tbl_df
+
+	sorted <- data.frame(i = integer(),
+						 j = integer(),
+						 loss = numeric(),
+						 original_order = integer())
+
+	merges <- merges %>%
+		mutate(original_order = row_number(),
+			   has_i = (i < 0 | i %in% sorted$original_order),
+			   has_j = (j < 0 | j %in% sorted$original_order),
+			   predecessors = (has_i & has_j))
+
+	# updates
+	while(nrow(merges) > 0){
+		merges <- merges %>%
+			filter(!(i %in% sorted$i)) %>%
+			mutate(has_i = i < 0 | i %in% sorted$original_order,
+				   has_j = j < 0 | j %in% sorted$original_order,
+				   predecessors = has_i & has_j)
+
+		update <- merges %>%
+			filter(predecessors) %>%
+			filter(loss == min(loss)) %>%
+			select(i, j, loss, original_order)
+
+
+		sorted <- rbind(sorted, update)
+	}
+
+	order_lookup <- sorted %>%
+		select(original_order) %>%
+		mutate(new_order = row_number()) %>%
+		arrange(original_order) %>%
+		select(new_order)
+
+	order_lookup <- order_lookup$new_order
+
+	sorted$i[sorted$i > 0] <- order_lookup[sorted$i[sorted$i > 0]]
+	sorted$j[sorted$j > 0] <- order_lookup[sorted$j[sorted$j > 0]]
+	rownames(sorted) <- 1:nrow(sorted)
+	sorted
 
 }
