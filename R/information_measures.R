@@ -44,7 +44,7 @@ simplex_normalize <- function(p){
 #' @return numeric the KL divergence between p and q
 #' @export
 
-DKL <- function(p,q, check = FALSE){
+DKL <- function(p,q, check = FALSE, drop_threshold = 0){
 	# if(!is.numeric(p) | !is.numeric(q)){
 	# 	return(NaN)
 	# }
@@ -59,11 +59,12 @@ DKL <- function(p,q, check = FALSE){
 		stop('Distribution alphabets are different size')
 	}
 
-	drop <- p < 10^(-10)
+	drop <- p < drop_threshold
+
 	p <- p[!drop]
 	q <- q[!drop]
 
-	return(as.numeric(p %*% log(p/q)))
+	return(sum(p * log(p/q)))
 }
 
 euc <- function(p,q){
@@ -72,6 +73,7 @@ euc <- function(p,q){
 
 
 #' Find the entropy of a distribution
+#' @param p a normalized vector of nonnegative probabilities.
 #' @export
 
 H <- function(p){
@@ -138,27 +140,27 @@ compute_distributions <- function(data, group_col = NULL){
 
 #' Compute mutual information for grouped data.
 #' @export
-mutual_info <- function(data, group_col = NULL){
-
-	if(nrow(data) < 2) return(0) # would NA be better?
-
-	distributions <- compute_distributions(data, group_col)
-
-	independent <- distributions$group %*% t(distributions$category)
-	(distributions$joint * log(distributions$joint / independent)) %>%
-		sum(na.rm = T)
-
-	# f <- function(i){
-	# 	DKL(distributions$joint[i,] / sum(distributions$joint[i,]),
-	# 		distributions$category)
-	# }
-	#
-	# divs <- 1:length(distributions$group) %>%
-	# 	as.matrix() %>%
-	# 	apply(MARGIN = 1,
-	# 		  FUN = f)
-	# divs %*% distributions$group %>% c
-}
+# mutual_info <- function(data, group_col = NULL){
+#
+# 	if(nrow(data) < 2) return(0) # would NA be better?
+#
+# 	distributions <- compute_distributions(data, group_col)
+#
+# 	independent <- distributions$group %*% t(distributions$category)
+# 	(distributions$joint * log(distributions$joint / independent)) %>%
+# 		sum(na.rm = T)
+#
+# 	# f <- function(i){
+# 	# 	DKL(distributions$joint[i,] / sum(distributions$joint[i,]),
+# 	# 		distributions$category)
+# 	# }
+# 	#
+# 	# divs <- 1:length(distributions$group) %>%
+# 	# 	as.matrix() %>%
+# 	# 	apply(MARGIN = 1,
+# 	# 		  FUN = f)
+# 	# divs %*% distributions$group %>% c
+# }
 
 
 #' @export
@@ -166,6 +168,12 @@ entropy <- function(data){
 	if(nrow(data) < 2) return(0) # would NA be better?
 	distributions <- compute_distributions(data)
 	H(distributions$category)
+}
+
+#' @export
+mutual_info <- function(mat, drop_threshold = 10^(-20)){
+	ind <- as.matrix(rowSums(mat) / sum(mat)) %*% t(as.matrix(colSums(mat)/sum(mat)))
+	DKL(mat/sum(mat), ind, drop_threshold = drop_threshold)
 }
 
 
