@@ -1,7 +1,7 @@
 #' cluster
 #' @name cluster
 #' @docType package
-#' @import rgdal dplyr rgeos Matrix reshape2 data.table
+#' @import rgdal dplyr rgeos reshape2 data.table utils
 
 NULL
 
@@ -13,9 +13,11 @@ NULL
 
 info_clust <- function(df, constraint){
 	k <- 1
-	a <- empty_hclust(nrow(df))
+	N <- nrow(df)
+	pb <- txtProgressBar(style = 3)
+
 	merge_lookup <- empty_merge_lookup(nrow(df))
-	all_merges <- data_frame(i = integer(),
+	all_merges <- data.frame(i = integer(),
 							 j = integer(),
 							 loss = numeric())
 	while(nrow(df) > 1){
@@ -23,6 +25,7 @@ info_clust <- function(df, constraint){
 		constraint <- update_constraint(constraint, merge_list)
 		if(nrow(merge_list) != 0){
 			df <- update_df(df, merge_list)
+			setTxtProgressBar(pb, (N - nrow(df) + 1) / N)
 			all_merges <- rbind(all_merges,
 								data.frame(i = unlist(merge_lookup[merge_list$i]),
 										   j = unlist(merge_lookup[merge_list$j]),
@@ -33,10 +36,11 @@ info_clust <- function(df, constraint){
 			}
 			merge_lookup[merge_list[,2]] <- NULL
 		}
-		print(c(nrow(df), nrow(constraint), length(merge_lookup)))
 	}
 	# this needs some work, TBD
 	all_merges <- all_merges %>% sort_merges()
+
+	a <- empty_hclust(N)
 	a$height <- all_merges$loss
 	a$height <- cumsum(a$height)
 	a$merge <- as.matrix(all_merges[,c('i','j')])
@@ -71,9 +75,9 @@ info_loss <- function(df, i, j){
 	q_j <- q_j / tot_j
 	q_ij <- q_ij / (tot_i + tot_j)
 
-	p_i * DKL(p = q_i, q = p_Y) +
-	p_j * DKL(p = q_j, q = p_Y) -
-	p_ij * DKL(p = q_ij, q = p_Y)
+	p_i  * DKL(q_i,  p_Y) +
+	p_j  * DKL(q_j,  p_Y) -
+	p_ij * DKL(q_ij, p_Y)
 
 }
 
@@ -85,7 +89,7 @@ info_loss <- function(df, i, j){
 make_merge_list <- function(df, constraint){
 	# each node needs to be merged no more than once in each outer iteration.
 
-	df <- df %>% mutate(cluster = row_number())
+	df <- dplyr::mutate(df, cluster = dplyr::row_number())
 
 	merge_list <- data_frame(i = integer(),
 							 j = integer(),
@@ -191,11 +195,11 @@ sort_merges <- function(merges){
 						 loss = numeric(),
 						 original_order = integer())
 
-	merges <- merges %>%
-		mutate(original_order = row_number(),
-			   has_i = (i < 0 | i %in% sorted$original_order),
-			   has_j = (j < 0 | j %in% sorted$original_order),
-			   predecessors = (has_i & has_j))
+	merges <- dplyr::mutate(merges,
+							original_order = dplyr::row_number(),
+							has_i = (i < 0 | i %in% sorted$original_order),
+							has_j = (j < 0 | j %in% sorted$original_order),
+							predecessors = (has_i & has_j))
 
 	# updates
 	while(nrow(merges) > 0){

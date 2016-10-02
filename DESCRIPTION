@@ -7,14 +7,13 @@ Depends:
     R (>= 3.1.3)
 Imports:
     dplyr,
+    tidyr,
     acs,
     rgeos,
-    leaflet,
     stringr,
-    mvtnorm,
-    matrixcalc,
-    numDeriv,
-    data.table
+    data.table,
+    rgdal,
+    sp
 License: CC0
 LazyData: true
 VignetteBuilder: knitr
