@@ -63,7 +63,7 @@ info_analysis <- function(tracts, cols, resolution = NULL, grid_tract = NULL, gr
 	grid_polys@data <- grid_polys@data %>% left_join(cell_data, by = c('id' = 'cell'))
 
 	return(list(H_Y  = tracts@data[,races] %>% colSums() %>% simplex_normalize() %>% H,
-				I_XY = tracts[,cols] %>% mutual_info(),
+				I_XY = tracts@data[,cols] %>% mutual_info(),
 				J_XY = weighted.mean(df$info, df$pop),
 				grid_tract = grid_tract,
 				grid       = grid_polys))
