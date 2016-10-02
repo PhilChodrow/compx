@@ -92,9 +92,3 @@ test_that('Mutual info of independent RVs is 0',{
 	mat <- matrix(1,10,10)
 	expect_equal(mutual_info(mat),0)
 })
-
-
-
-
-
-
