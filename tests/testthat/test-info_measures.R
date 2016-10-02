@@ -1,4 +1,6 @@
 library(compx)
+library(dplyr)
+library(tidyr)
 
 context('Objective function')
 
@@ -20,7 +22,7 @@ test_that("Can't compute divergence of distributions over different lengths", {
 })
 
 test_that("Divergence warns on nonnormalized vectors",{
-	expect_warning(DKL(p = c(1,1), q = c(1,1)))
+	expect_warning(DKL(p = c(1,1), q = c(1,1), check = TRUE))
 })
 
 test_that("Divergence works if p has zeros",{
@@ -31,8 +33,8 @@ test_that("Divergence works if p has zeros",{
 	q <- runif(10, 0, 1)
 	q <- q/sum(q)
 
-	expect_true(!is.na(DKL(p,q)))
-	expect_true(is.infinite(DKL(q,p)))
+	expect_true(!is.na(DKL(p,q, drop_threshold = 10^(-10))))
+	expect_true(is.infinite(DKL(q,p, drop_threshold = 10^(-10))))
 })
 
 test_that("Divergence across two matrices is zero only if they are the same",{
@@ -58,10 +60,9 @@ test_that("Divergence across two matrices is zero only if they are the same",{
 
 	expect_true(obj1 > 0)
 	expect_true(obj2 == 0)
-	# Ok, this appears to work correctly, so what we should do now is use this same idiom to calculate the objective function (i.e. first calculate the estimate matrix and then iterate over it.)
+
 
 })
-
 
 test_that("Entropy is divergence from uniform",{
 	p <- runif(10, 0,1)
@@ -69,3 +70,31 @@ test_that("Entropy is divergence from uniform",{
 	u <- rep(1/length(p), length(p))
 	expect_equal(H(p), log(length(p)) - DKL(p,u))
 })
+
+
+df <- nycflights13::flights
+tab <- df %>%
+	group_by(month, carrier) %>%
+	summarise(n = n()) %>%
+	spread(key = carrier, value = n, fill = 0) %>%
+	select(-month)
+
+test_that('Mutual info works on matrices',{
+	mat <- 	tab %>% as.matrix()
+	expect_equal(class(mutual_info(mat)), 'numeric')
+})
+
+test_that('Mutual info works on data frames',{
+	expect_equal(class(mutual_info(tab)), 'numeric')
+})
+
+test_that('Mutual info of independent RVs is 0',{
+	mat <- matrix(1,10,10)
+	expect_equal(mutual_info(mat),0)
+})
+
+
+
+
+
+

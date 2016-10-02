@@ -18,7 +18,7 @@ NULL
 simplex_check <- function(p, allow_zero = TRUE){
 	if(min(is.na(p)) == 1) return(FALSE)
 	nonneg <- ifelse(allow_zero, min(p >= 0), min(p > 0))
-	normed <- abs(sum(p) - 1) < .1 # numerical tolerance
+	normed <- abs(sum(p) - 1) < .01 # numerical tolerance
 	nonneg & normed
 }
 
@@ -171,9 +171,13 @@ entropy <- function(data){
 }
 
 #' @export
-mutual_info <- function(mat, drop_threshold = 10^(-20)){
-	ind <- as.matrix(rowSums(mat) / sum(mat)) %*% t(as.matrix(colSums(mat)/sum(mat)))
-	DKL(mat/sum(mat), ind, drop_threshold = drop_threshold)
+mutual_info <- function(input, drop_threshold = 10^(-20)){
+	if(class(input) != 'matrix'){
+		input <- as.matrix(input)
+	}
+	ind <- as.matrix(rowSums(input) / sum(input)) %*%
+		   t(as.matrix(colSums(input)/sum(input)))              # margin product
+	DKL(input/sum(input), ind, drop_threshold = drop_threshold)
 }
 
 
