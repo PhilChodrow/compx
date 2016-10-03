@@ -20,9 +20,12 @@ info_clust <- function(df, constraint){
 	all_merges <- data.frame(i = integer(),
 							 j = integer(),
 							 loss = numeric())
+
 	while(nrow(df) > 1){
 		merge_list <- make_merge_list(df, constraint)
 		constraint <- update_constraint(constraint, merge_list)
+		print(length(constraint))
+		print(nrow(df))
 		if(nrow(merge_list) != 0){
 			df <- update_df(df, merge_list)
 			setTxtProgressBar(pb, (N - nrow(df) + 1) / N)
@@ -75,9 +78,9 @@ info_loss <- function(df, i, j){
 	q_j <- q_j / tot_j
 	q_ij <- q_ij / (tot_i + tot_j)
 
-	p_i  * DKL(q_i,  p_Y) +
-	p_j  * DKL(q_j,  p_Y) -
-	p_ij * DKL(q_ij, p_Y)
+	p_i  * DKL(q_i,  p_Y, drop_threshold = 10^(-10)) +
+	p_j  * DKL(q_j,  p_Y, drop_threshold = 10^(-10)) -
+	p_ij * DKL(q_ij, p_Y, drop_threshold = 10^(-10))
 
 }
 
@@ -89,7 +92,7 @@ info_loss <- function(df, i, j){
 make_merge_list <- function(df, constraint){
 	# each node needs to be merged no more than once in each outer iteration.
 
-	df <- dplyr::mutate(df, cluster = dplyr::row_number())
+	df <- dplyr::mutate(df, cluster = row_number())
 
 	merge_list <- data_frame(i = integer(),
 							 j = integer(),
@@ -196,7 +199,7 @@ sort_merges <- function(merges){
 						 original_order = integer())
 
 	merges <- dplyr::mutate(merges,
-							original_order = dplyr::row_number(),
+							original_order = row_number(),
 							has_i = (i < 0 | i %in% sorted$original_order),
 							has_j = (j < 0 | j %in% sorted$original_order),
 							predecessors = (has_i & has_j))
