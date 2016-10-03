@@ -54,12 +54,12 @@ info_analysis <- function(tracts, columns, resolution = NULL, grid_tract = NULL,
 		data.table() %>%
 		setkey('cell')
 
-	df <- cells[, list(info = 4 * mutual_info(.SD) / resolution^2,
+	df <- cells[, list(info = mutual_info(.SD),
 					   pop = sum(.SD)),
 				by = .(cell),
 				.SDcols = columns]
 	cell_data <- cells[,lapply(.SD, sum, na.rm = T), by = .(cell)]
-	df <- df %>% left_join(cell_data)
+	df <- df %>% left_join(cell_data, by = 'cell')
 
 	grid_polys@data <- grid_polys@data %>% left_join(cell_data, by = c('id' = 'cell'))
 
