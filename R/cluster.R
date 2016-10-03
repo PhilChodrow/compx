@@ -24,8 +24,6 @@ info_clust <- function(df, constraint){
 	while(nrow(df) > 1){
 		merge_list <- make_merge_list(df, constraint)
 		constraint <- update_constraint(constraint, merge_list)
-		print(length(constraint))
-		print(nrow(df))
 		if(nrow(merge_list) != 0){
 			df <- update_df(df, merge_list)
 			setTxtProgressBar(pb, (N - nrow(df) + 1) / N)
