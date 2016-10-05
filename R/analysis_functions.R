@@ -49,7 +49,7 @@ info_analysis <- function(tracts, columns, resolution = NULL, grid_tract = NULL,
 	cells <- grid_tract %>%
 		mutate(tract = as.character(tract)) %>%
 		left_join(data, by = c('tract' = 'GEOID')) %>%
-		mutate_at(races, function(y) y * .$weight) %>%
+		mutate_at(columns, function(y) y * .$weight) %>%
 		select_(.dots = c('cell', columns)) %>%
 		data.table() %>%
 		setkey('cell')
@@ -63,7 +63,7 @@ info_analysis <- function(tracts, columns, resolution = NULL, grid_tract = NULL,
 
 	grid_polys@data <- grid_polys@data %>% left_join(cell_data, by = c('id' = 'cell'))
 
-	return(list(H_Y  = tracts@data[,races] %>% colSums() %>% simplex_normalize() %>% H,
+	return(list(H_Y  = tracts@data[,columns] %>% colSums() %>% simplex_normalize() %>% H,
 				I_XY = tracts@data[,columns] %>% mutual_info(),
 				J_XY = weighted.mean(df$info, df$pop),
 				grid_tract = grid_tract,
