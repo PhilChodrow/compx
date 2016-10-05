@@ -42,6 +42,7 @@ info_analysis <- function(tracts, columns, resolution = NULL, grid_tract = NULL,
 		grid_polys <- grid$grid_polys
 	}
 
+
 	data <- tracts@data[,c(columns, 'GEOID')]
 
 	cells <- grid_tract %>%
