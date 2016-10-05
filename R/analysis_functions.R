@@ -35,8 +35,6 @@ make_grid <- function(tracts, resolution){
 }
 
 #' @export
-
-
 info_analysis <- function(tracts, columns, resolution = NULL, grid_tract = NULL, grid_polys = NULL){
 	if(is.null(grid_tract)){
 		grid       <- make_grid(tracts, resolution)
@@ -61,7 +59,9 @@ info_analysis <- function(tracts, columns, resolution = NULL, grid_tract = NULL,
 	cell_data <- cells[,lapply(.SD, sum, na.rm = T), by = .(cell)]
 	df <- df %>% left_join(cell_data, by = 'cell')
 
-	grid_polys@data <- grid_polys@data %>% left_join(cell_data, by = c('id' = 'cell'))
+	join_cols <- setdiff(names(df), names(grid_polys))
+
+	grid_polys@data <- grid_polys@data %>% left_join(df[,join_cols], by = c('id' = 'cell'))
 
 	return(list(H_Y  = tracts@data[,columns] %>% colSums() %>% simplex_normalize() %>% H,
 				I_XY = tracts@data[,columns] %>% mutual_info(),
