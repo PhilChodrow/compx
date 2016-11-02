@@ -52,7 +52,7 @@ info_analysis <- function(tracts, columns, resolution = NULL, grid_tract = NULL,
 	cells <- grid_tract %>%
 		mutate(tract = as.character(tract)) %>%
 		left_join(data, by = c('tract' = 'GEOID'), copy = TRUE) %>%
-		mutate_at(columns, function(y) y * .$weight) %>%
+		dplyr::mutate_at(columns, function(y) y * .$weight) %>%
 		select_(.dots = c('cell', columns)) %>%
 		data.table() %>%
 		setkey('cell')

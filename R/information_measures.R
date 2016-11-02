@@ -6,7 +6,7 @@
 NULL
 
 # -----------------------------------------------------------------------------
-# INFORMATION GEOMETRY
+# INFORMATION MEASURES
 # -----------------------------------------------------------------------------
 
 #' Check whether a vector is an element of the probability simplex
@@ -41,9 +41,10 @@ simplex_normalize <- function(p){
 #' Find the Kullback-Leibler divergence of two empirical distributions.
 #' @param p the 'true' distribution
 #' @param q the estimated distribution
+#' @param check whether to check that p and q are valid probability distributions
+#' @param drop_threshold entries of p and q such that p < drop_threshold will be removed from the computation, avoiding 0*0 multiplication.
 #' @return numeric the KL divergence between p and q
 #' @export
-
 DKL <- function(p,q, check = FALSE, drop_threshold = 0){
 	# if(!is.numeric(p) | !is.numeric(q)){
 	# 	return(NaN)
@@ -67,15 +68,10 @@ DKL <- function(p,q, check = FALSE, drop_threshold = 0){
 	return(sum(p * log(p/q)))
 }
 
-euc <- function(p,q){
-	sum((p-q)^2)
-}
-
 
 #' Find the entropy of a distribution
 #' @param p a normalized vector of nonnegative probabilities.
 #' @export
-
 H <- function(p){
 	if(!simplex_check(p)){
 		message <- paste0('p is not on the simplex: sum(p) = ', sum(p))
@@ -85,91 +81,16 @@ H <- function(p){
 	p <- p[!drop]
 	as.numeric(- p %*% log(p))
 }
-
+#' Compute the binary entropy function for a fixed proportion.
+#' @param p the proportion
 #' @export
-
-H_B <- function(proportion){
-	-(proportion * log(proportion) + (1-proportion) * log(1-proportion))
+H_B <- function(p){
+	-(p * log(p) + (1-p) * log(1-p))
 }
 
-
-# -----------------------------------------------------------------------------
-# MUTUAL INFORMATION
-# -----------------------------------------------------------------------------
-
-#' Compute joint distribution for a grouped table.
-#' @export
-
-compute_distributions <- function(data, group_col = NULL){
-
-	if(is.null(group_col)){
-		data$group_col <- row.names(data)
-		group_col = 'group_col'
-	}
-
-	category_cols <- names(data)[names(data) != group_col]
-
-	gathered <- data %>% group_by_(group_col) %>%
-		summarise_each(funs(sum)) %>%
-		gather_( key_col = 'category', value_col = 'n', gather_cols = category_cols) %>%
-		mutate(p = n / sum(n)) %>%
-		select(-n)
-
-	joint <- gathered %>%
-		spread_(key_col = 'category', value_col = 'p', fill = 0) %>%
-		select_(.dots = category_cols) %>%
-		as.matrix()
-
-	group <- gathered %>%
-		group_by_(group_col) %>%
-		summarise(p = sum(p)) %>%
-		select(p) %>%
-		as.matrix()
-
-	category <- gathered %>%
-		group_by_('category') %>%
-		summarise(p = sum(p)) %>%
-		spread(category, p) %>%
-		select_(.dots = category_cols) %>%
-		gather(key = category, value = p) %>%
-		select(p) %>%
-		as.matrix()
-
-	list(joint = joint, group = group, category = category)
-}
-
-#' Compute mutual information for grouped data.
-#' @export
-# mutual_info <- function(data, group_col = NULL){
-#
-# 	if(nrow(data) < 2) return(0) # would NA be better?
-#
-# 	distributions <- compute_distributions(data, group_col)
-#
-# 	independent <- distributions$group %*% t(distributions$category)
-# 	(distributions$joint * log(distributions$joint / independent)) %>%
-# 		sum(na.rm = T)
-#
-# 	# f <- function(i){
-# 	# 	DKL(distributions$joint[i,] / sum(distributions$joint[i,]),
-# 	# 		distributions$category)
-# 	# }
-# 	#
-# 	# divs <- 1:length(distributions$group) %>%
-# 	# 	as.matrix() %>%
-# 	# 	apply(MARGIN = 1,
-# 	# 		  FUN = f)
-# 	# divs %*% distributions$group %>% c
-# }
-
-
-#' @export
-entropy <- function(data){
-	if(nrow(data) < 2) return(0) # would NA be better?
-	distributions <- compute_distributions(data)
-	H(distributions$category)
-}
-
+#' Compute the mutual information of a data frame or matrix of crosstabs
+#' @param input a data frame or matrix representing a crosstab
+#' @param drop_threshold numerical keyword to KL divergence avoiding 0*0 multiplication. Should not be modified.
 #' @export
 mutual_info <- function(input, drop_threshold = 10^(-20)){
 	if(class(input) != 'matrix'){
@@ -179,7 +100,3 @@ mutual_info <- function(input, drop_threshold = 10^(-20)){
 		   t(as.matrix(colSums(input)/sum(input)))              # margin product
 	DKL(input/sum(input), ind, drop_threshold = drop_threshold)
 }
-
-
-
-
