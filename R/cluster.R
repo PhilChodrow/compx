@@ -1,7 +1,7 @@
 #' cluster
 #' @name cluster
 #' @docType package
-#' @import rgdal dplyr rgeos reshape2 data.table utils
+#' @import rgdal tidyverse rgeos data.table utils
 
 NULL
 

@@ -1,7 +1,7 @@
 #' info
 #' @name info
 #' @docType package
-#' @import dplyr tidyr
+#' @import tidyverse
 
 NULL
 
