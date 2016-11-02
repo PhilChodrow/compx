@@ -5,6 +5,10 @@
 
 NULL
 
+
+#' Construct a spatial grid over a SpatialPolygonsDataFrame
+#' @param tracts the spdf
+#' @param resolution the radius of the grid to produce
 #' @export
 
 make_grid <- function(tracts, resolution){
@@ -47,7 +51,7 @@ info_analysis <- function(tracts, columns, resolution = NULL, grid_tract = NULL,
 
 	cells <- grid_tract %>%
 		mutate(tract = as.character(tract)) %>%
-		left_join(data, by = c('tract' = 'GEOID')) %>%
+		left_join(data, by = c('tract' = 'GEOID'), copy = TRUE) %>%
 		mutate_at(columns, function(y) y * .$weight) %>%
 		select_(.dots = c('cell', columns)) %>%
 		data.table() %>%
@@ -58,11 +62,11 @@ info_analysis <- function(tracts, columns, resolution = NULL, grid_tract = NULL,
 				by = .(cell),
 				.SDcols = columns]
 	cell_data <- cells[,lapply(.SD, sum, na.rm = T), by = .(cell)]
-	df <- df %>% left_join(cell_data, by = 'cell')
+	df <- df %>% left_join(cell_data, by = 'cell', copy = TRUE)
 
 	join_cols <- setdiff(names(df), names(grid_polys))
 
-	grid_polys@data <- grid_polys@data %>% left_join(df[,join_cols], by = c('id' = 'cell'))
+	grid_polys@data <- grid_polys@data %>% left_join(df[,join_cols], by = c('id' = 'cell'), copy = TRUE)
 
 	return(list(H_Y  = tracts@data[,columns] %>% colSums() %>% simplex_normalize() %>% H,
 				I_XY = tracts@data[,columns] %>% mutual_info(),
