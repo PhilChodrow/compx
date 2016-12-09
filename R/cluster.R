@@ -59,26 +59,26 @@ info_clust <- function(df, constraint){
 info_loss <- function(df, i, j){
 
 	p_Y <- colSums(df) %>% simplex_normalize()
-	N <- sum(df)
+	N   <- sum(df)
 
-	q_i <- as.numeric(df[i,])
-	q_j <- as.numeric(df[j,])
+	q_i  <- as.numeric(df[i,])
+	q_j  <- as.numeric(df[j,])
 	q_ij <- q_i + q_j
 
 	tot_i <- sum(q_i)
 	tot_j <- sum(q_j)
 
-	p_i <- tot_i / N
-	p_j <- tot_j / N
+	p_i  <- tot_i / N
+	p_j  <- tot_j / N
 	p_ij <- p_i + p_j
 
-	q_i <- q_i / tot_i
-	q_j <- q_j / tot_j
+	q_i  <- q_i / tot_i
+	q_j  <- q_j / tot_j
 	q_ij <- q_ij / (tot_i + tot_j)
 
-	p_i  * DKL(q_i,  p_Y, drop_threshold = 10^(-10)) +
-	p_j  * DKL(q_j,  p_Y, drop_threshold = 10^(-10)) -
-	p_ij * DKL(q_ij, p_Y, drop_threshold = 10^(-10))
+	p_i  * DKL(q_i,  p_Y) +
+	p_j  * DKL(q_j,  p_Y) -
+	p_ij * DKL(q_ij, p_Y)
 
 }
 
@@ -86,11 +86,11 @@ info_loss <- function(df, i, j){
 #' @param df the dataframe at this stage of the algorithm.
 #' @param constraint the constraint at this stage of the algorithm
 #' @return merge_list a data frame with columns i and j (to be merged) and loss, the information loss associated with each.
-
+#' @export
 make_merge_list <- function(df, constraint){
 	# each node needs to be merged no more than once in each outer iteration.
 
-	df <- dplyr::mutate(df, cluster = row_number())
+
 
 	merge_list <- data_frame(i = integer(),
 							 j = integer(),
@@ -101,11 +101,12 @@ make_merge_list <- function(df, constraint){
 		candidates <- candidates[candidates != i]
 		losses <- candidates %>%
 			as.matrix() %>%
-			apply(MARGIN = 1, FUN = function(j) info_loss(df, i, j))
+			apply(MARGIN = 1, FUN = function(j) info_loss(df[, !(names(df) == 'cluster')], i, j))
 
 		return(c(candidates[which.min(losses)], min(losses)))
 	}
 
+	df <- dplyr::mutate(df, cluster = row_number())
 	# main loop
 	for(i in df$cluster){
 		if(!(i %in% c(merge_list$i,merge_list$j))){
@@ -115,7 +116,9 @@ make_merge_list <- function(df, constraint){
 				min_eye <- the_min[1]
 				if(i == min_eye){
 					merge_list <- rbind(merge_list,
-										data.frame(i = min_eye, j = min_jay, loss = the_min[2]))
+										data.frame(i = min_eye,
+												   j = min_jay,
+												   loss = the_min[2]))
 				}
 			}
 		}

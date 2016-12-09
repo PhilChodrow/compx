@@ -4,16 +4,17 @@
 \alias{get_census_data}
 \title{Make a set of joined data based on specified census information at the block level.}
 \usage{
-get_census_data(states, counties, table_num, end_year = 2012, span = 5)
+get_census_data(state, table_nums = c("B15003", "B03002", "C24010"),
+  lookup_table = NULL, end_year = 2014, span = 5)
 }
 \arguments{
-\item{counties}{a vector of ints reflecting counties to use.}
+\item{state}{the state for which to obtain data.}
 
 \item{end_year}{the final year of the data set to use}
 
 \item{span}{the number of years the data should extend back}
 
-\item{state}{the state for which to obtain data.}
+\item{counties}{a vector of ints reflecting counties to use.}
 
 \item{table_name}{character name of the census table t use}
 }

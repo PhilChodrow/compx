@@ -42,10 +42,9 @@ simplex_normalize <- function(p){
 #' @param p the 'true' distribution
 #' @param q the estimated distribution
 #' @param check whether to check that p and q are valid probability distributions
-#' @param drop_threshold entries of p and q such that p < drop_threshold will be removed from the computation, avoiding 0*0 multiplication.
 #' @return numeric the KL divergence between p and q
 #' @export
-DKL <- function(p,q, check = FALSE, drop_threshold = 0){
+DKL <- function(p,q, check = FALSE){
 	# if(!is.numeric(p) | !is.numeric(q)){
 	# 	return(NaN)
 	# }
@@ -55,18 +54,21 @@ DKL <- function(p,q, check = FALSE, drop_threshold = 0){
 			warning(message)
 		}
 	}
-
 	if(length(p) != length(q)){
 		stop('Distribution alphabets are different size')
 	}
-
-	drop <- p < drop_threshold
-
-	p <- p[!drop]
-	q <- q[!drop]
-
-	return(sum(p * log(p/q)))
+	return(sum(p * log(p/q), na.rm = T))
 }
+
+#' @export
+DJS <- function(p, q, w = NULL){
+	if(is.null(w)){
+		w <- sum(p) / (sum(p) + sum(q))
+	}
+	r <- w * p + (1-w) * q
+	w*DKL(p, r) + (1-w) * DKL(q, r)
+}
+
 
 
 #' Find the entropy of a distribution
@@ -92,11 +94,11 @@ H_B <- function(p){
 #' @param input a data frame or matrix representing a crosstab
 #' @param drop_threshold numerical keyword to KL divergence avoiding 0*0 multiplication. Should not be modified.
 #' @export
-mutual_info <- function(input, drop_threshold = 10^(-20)){
+mutual_info <- function(input){
 	if(class(input) != 'matrix'){
 		input <- as.matrix(input)
 	}
 	ind <- as.matrix(rowSums(input) / sum(input)) %*%
 		   t(as.matrix(colSums(input)/sum(input)))              # margin product
-	DKL(input/sum(input), ind, drop_threshold = drop_threshold)
+	DKL(input/sum(input), ind)
 }

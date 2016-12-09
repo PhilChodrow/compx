@@ -1,6 +1,6 @@
-library(compx)
-library(dplyr)
-library(tidyr)
+library(compx, warn.conflicts = FALSE, quietly = TRUE)
+library(dplyr, warn.conflicts = FALSE, quietly = TRUE)
+library(tidyr, warn.conflicts = FALSE, quietly = TRUE)
 
 context('Objective function')
 
@@ -33,8 +33,8 @@ test_that("Divergence works if p has zeros",{
 	q <- runif(10, 0, 1)
 	q <- q/sum(q)
 
-	expect_true(!is.na(DKL(p,q, drop_threshold = 10^(-10))))
-	expect_true(is.infinite(DKL(q,p, drop_threshold = 10^(-10))))
+	expect_true(!is.na(DKL(p,q)))
+	expect_true(is.infinite(DKL(q,p)))
 })
 
 test_that("Divergence across two matrices is zero only if they are the same",{
