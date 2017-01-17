@@ -12,7 +12,8 @@ NULL
 #' @export
 id_lookup <- function(tracts, key_col = 'GEOID'){
 	data_frame(id = map_chr(tracts@polygons, ~.@ID),
-			   geoid = tracts@data[,key_col])
+			   geoid = tracts@data[,key_col]) %>%
+		mutate(geoid = as.character(geoid))
 }
 
 #' Construct a tibble of geographic distances between pairs of tract centroids.
