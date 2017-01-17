@@ -104,6 +104,14 @@ edge_list_with_dists <- function(tracts, data, divergence = 'KL', ...){
 					 euc     = function(p) diag(length(p)),
 					 cum_euc = cum_euc)
 
+	NA_multiply <- function(D_alpha, H){
+		na_locs           <- is.na(t(D_alpha) %*% D_alpha)
+		H[is.infinite(H)] <- 0
+		result            <- t(D_alpha) %*% H %*% D_alpha
+		result[na_locs]   <- NA
+		result
+	}
+
 
 	out_df <- edge_list_df
 	if(divergence %in% c('KL', 'euc', 'cum_euc')){
