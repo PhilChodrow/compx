@@ -20,7 +20,6 @@ id_lookup <- function(tracts, key_col = 'GEOID'){
 #' @param ... additional parameters passed to id_lookup
 #' @return a tibble with three columns: two are tract names, and the third
 #' is the geographic distance between them.
-
 distance_df <- function(tracts, ...){
 	ids <- id_lookup(tracts, ...)
 
@@ -41,7 +40,6 @@ distance_df <- function(tracts, ...){
 #' @param tracts the spdf whose coordinates we wish to compute.
 #' @param ... additional parameters passed to id_lookup
 #' @export
-
 coords_df <- function(tracts, ...){
 	ids <- id_lookup(tracts, ...)
 
@@ -61,7 +59,6 @@ coords_df <- function(tracts, ...){
 #' @return tibble with two columns; two tract ids appear next to each
 #' other if they are geographically adjacent.
 #' @export
-
 adjacency_df <- function(tracts, ...){
 	ids <- id_lookup(tracts, ...)
 
@@ -85,7 +82,6 @@ adjacency_df <- function(tracts, ...){
 #' @param data the tibble containing the demographics for the tracts.
 #' @return a nested tibble containing tract-level demographics and coordinates
 #' as vectors in list-columns.
-
 node_df <- function(tracts, data, ...){
 
 	coords <- coords_df(tracts, ...)
@@ -112,7 +108,6 @@ node_df <- function(tracts, data, ...){
 #' @param sigma the multiplicative constant in the square exponential kernel.
 #' @return a tract-level tibble with a column D_alpha giving the derivatives of
 #' demographic frequencies with respect to spatial coordinates.
-
 compute_derivatives <- function(tracts, data, sigma = 1, ...){
 
 	do_regression <- function(X, Y, W){
@@ -149,7 +144,6 @@ compute_derivatives <- function(tracts, data, sigma = 1, ...){
 #' @return a tibble with a column local_H containing the Hessian
 #' (or Riemannian metric) in local coordinates.
 #' @export
-
 compute_hessian <- function(tracts, data, divergence = 'KL', sigma = 1, ...){
 
 	cum_euc <- function(p){

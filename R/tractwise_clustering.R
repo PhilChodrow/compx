@@ -150,7 +150,6 @@ graph_from_tracts <- function(tracts, data, divergence = 'KL', ...){
 #' @return a matrix containing the affinities computed with the quadratic exponential
 #' affinity kernel
 #' @export
-
 affinity_matrix <- function(g, sigma = 1){
 	dists <- distances(g, weights = E(g)$dist^2)
 	exp(-dists * sigma)
@@ -166,7 +165,6 @@ affinity_matrix <- function(g, sigma = 1){
 #' @details This function involves a matrix inversion and is therefore fairly
 #' expensive for large graphs.
 #' @export
-
 generalized_laplacian_matrix <- function(input, ...){
 
 	if(class(input) == 'igraph'){
