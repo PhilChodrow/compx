@@ -35,8 +35,8 @@ sqdist <- function(a, b){
 # 	as.numeric((t(a) %*% b) %*% a)
 # }
 
-#' @export
-make_graph <- function(grid_data, coords){
+
+make_graph_deprecated <- function(grid_data, coords){
 
 	adj <- make_adjacency(grid_data, c('x', 'y', 't')) %>%
 		select(coord_key, neighbor)

@@ -58,33 +58,33 @@ compute_derivs <- function(grid_data, difference_methods = NULL){
 #' @param grid_data a grid_data data frame
 #' @return a data frame giving the adjacencies between grid cells, suitable for
 #' use as an edge-list to construct an igraph graph.
-#' @export
-make_adjacency <- function(grid_data, coords){
 
-	adj <- grid_data[,coords %>% append('coord_key')] %>%
-		arrange_(.dots = coords) %>%
-		unique()
-
-	for(coord in coords){
-		group_coords <- coords %>%
-			setdiff(coord)
-
-		varname <- list(paste0('forward_', coord), paste0('backward_', coord))
-		forward  <- lazyeval::interp(~lead(coord_key))
-		backward <- lazyeval::interp(~lag(coord_key))
-		varval <- list(forward, backward)
-
-		adj <- adj %>%
-			group_by_(.dots = group_coords) %>%
-			mutate_(.dots = setNames(varval, varname)) %>%
-			ungroup()
-	}
-	gather_cols <-names(adj)[grepl(pattern = 'ward', names(adj))]
-	gather_cols <- gather_cols %>% append('self')
-	adj %>%
-		mutate(self = coord_key) %>%
-		gather_(key_col = 'direction', value_col = 'neighbor', gather_cols = gather_cols)
-}
+# make_adjacency <- function(grid_data, coords){
+#
+# 	adj <- grid_data[,coords %>% append('coord_key')] %>%
+# 		arrange_(.dots = coords) %>%
+# 		unique()
+#
+# 	for(coord in coords){
+# 		group_coords <- coords %>%
+# 			setdiff(coord)
+#
+# 		varname <- list(paste0('forward_', coord), paste0('backward_', coord))
+# 		forward  <- lazyeval::interp(~lead(coord_key))
+# 		backward <- lazyeval::interp(~lag(coord_key))
+# 		varval <- list(forward, backward)
+#
+# 		adj <- adj %>%
+# 			group_by_(.dots = group_coords) %>%
+# 			mutate_(.dots = setNames(varval, varname)) %>%
+# 			ungroup()
+# 	}
+# 	gather_cols <-names(adj)[grepl(pattern = 'ward', names(adj))]
+# 	gather_cols <- gather_cols %>% append('self')
+# 	adj %>%
+# 		mutate(self = coord_key) %>%
+# 		gather_(key_col = 'direction', value_col = 'neighbor', gather_cols = gather_cols)
+# }
 
 #' Smooth a grid_data data frame by constructing a new column of proportions
 #' computed on the sum of a cell and each of its neighbors.
@@ -110,7 +110,7 @@ adjacency_smoother <- function(grid_data, coords){
 #' @param coord_names the names of the coordinate columns in grid_data
 #' @return a new grid_data object with hessians (Riemannian metrics) computed
 #' in local coordinates
-#' @export
+
 compute_metric <- function(grid_data, divergence, coord_names){
 
 	cum_euc <- function(p){
