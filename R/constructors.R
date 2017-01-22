@@ -207,11 +207,15 @@ add_coordinates <- function(g, tracts, ...){
 		select(-id, x, y)
 
 	if(is.null(V(g)$geoid)){
+		coords <- coords %>%
+			filter(geoid %in% names(V(g)))
+
 		g <- g %>%
 			set.vertex.attribute(name = 'x', index = coords$geoid, value = coords$x) %>%
 			set.vertex.attribute(name = 'y', index = coords$geoid, value = coords$y)
 		return(g)
 	}else{
+
 	coords <- data_frame(geoid = V(g)$geoid, key = names(V(g))) %>%
 		left_join(coords, by = c('geoid' = 'geoid'))
 
