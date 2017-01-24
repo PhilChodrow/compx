@@ -82,11 +82,12 @@ undirect <- function(adj, allow_self_loops = FALSE){
 
 	# remove self loops if option is toggled
 	if(!allow_self_loops){
-		out <- out %>%
-			filter(!(geoid_1 == geoid_2))
-		if('t_1' %in% names(adj)){
+		if('t_1' %in% names(out)){
 			out <- out %>%
-				filter(t_1 == t_2)
+				filter(geoid_1 != geoid_2 | t_1 != t_2)
+		}else{
+			out <- out %>%
+				filter(geoid_1 != geoid_2)
 		}
 	}
 
