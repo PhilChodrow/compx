@@ -101,10 +101,11 @@ metric_df <- compute_metric(tracts,             # use these tracts
 							race_2010,          # and these data
 							km = T,             # convert spatial units to km
 							sigma = 100,        # for numerical derivatives
-							divergence = 'euc') # use the Euclidean distance
+							divergence = 'DKL', # use the KL divergence to compare distributions
+							smooth = T)         # spatial smoothing (avoids singularities)
 ```
 
-In addition to the tracts and data parameters, `compute_metric` also allows users to specify whether length should be measured in km or degrees long/lat; the divergence function to use when comparing distributions, and `sigma`, a technical parameter relating to the computation of numerical derivatives required to compute the metric tensor. 
+In addition to the tracts and data parameters, `compute_metric` also allows users to specify whether length should be measured in km or degrees long/lat; the divergence function to use when comparing distributions (in `c('euc', 'cum_euc', 'DKL')`), and `sigma`, a technical parameter relating to the computation of numerical derivatives required to compute the metric tensor. The `smooth` parameter controls whether mild spatial smoothing is used to avoid singularities when using the KL divergence. 
 
 The output of `compute_metric` is a data frame, keyed by geoid, which gives the total population of the tract as well as a list-column with the metric tensor in local coordinates. Since we didn't give a time column, there are only two local coordinates *x* and *y*. 
 
@@ -160,7 +161,8 @@ metric_df <- compute_metric(tracts,
 							race_temporal, 
 							km = T, 
 							sigma = 100, 
-							divergence = 'euc')
+							divergence = 'DKL',
+							smooth = T)
 ```
 
 This version of `metric_df` is different in two respects: 

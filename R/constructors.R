@@ -35,6 +35,7 @@ make_adjacency <- function(tracts, ...){
 }
 
 # this is testable via simple counting
+#' @export
 add_temporal <- function(adj, t_vec = NULL){
 
 	# first construct layers for each value of t
@@ -61,6 +62,7 @@ add_temporal <- function(adj, t_vec = NULL){
 
 }
 
+#' @export
 undirect <- function(adj, allow_self_loops = FALSE){
 
 	# construct spatial keys
@@ -94,6 +96,7 @@ undirect <- function(adj, allow_self_loops = FALSE){
 	out %>% select(-key)
 }
 
+#' @export
 add_data <- function(adj, data){
 
 	all_ids <- c(adj$geoid_1, adj$geoid_2) %>% unique()
@@ -123,6 +126,7 @@ add_data <- function(adj, data){
 			   p_12 = map(n_12, ~./sum(.)))
 }
 
+#' @export
 add_hessian <- function(adj, divergence = 'DKL', p = 'p_12'){
 	assertthat::assert_that(divergence %in% c('DJS', 'DKL', 'euc'))
 	cum_euc <- function(p){
@@ -140,6 +144,16 @@ add_hessian <- function(adj, divergence = 'DKL', p = 'p_12'){
 }
 
 
+#' @export
+NA_multiply <- function(D_alpha, H){
+	na_locs           <- is.na(t(D_alpha) %*% D_alpha)
+	H[is.infinite(H)] <- 0
+	result            <- t(D_alpha) %*% H %*% D_alpha
+	result[na_locs]   <- NA
+	result
+}
+
+
 #' Early stage: pass hessians as names, pass DJS as a function.
 information_distances <- function(adj, divergence, ...){
 
@@ -150,13 +164,7 @@ information_distances <- function(adj, divergence, ...){
 
 	assertthat::assert_that(divergence %in% names(divergences))
 
-	NA_multiply <- function(D_alpha, H){
-		na_locs           <- is.na(t(D_alpha) %*% D_alpha)
-		H[is.infinite(H)] <- 0
-		result            <- t(D_alpha) %*% H %*% D_alpha
-		result[na_locs]   <- NA
-		result
-	}
+
 
 	if(divergence %in% c('DKL', 'euc', 'cum_euc')){
 		adj <- adj %>%
@@ -195,6 +203,7 @@ make_graph <- function(adj){
 	}
 }
 
+#' @export
 add_coordinates <- function(g, tracts, ...){
 	ids <- id_lookup(tracts, ...)
 

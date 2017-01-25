@@ -158,6 +158,15 @@ compute_derivatives <- function(adj, sigma = 1, ...){
 		mutate(W = map(W, ~ diag(., nrow = length(.)))) %>%
 		mutate(D_alpha = pmap(list(X, Y, W), do_regression))
 
+	smoother <- adj %>%
+		mutate(regression_weight = exp(- sigma * distance^2)) %>%
+		select_(.dots = group_vars %>% append(c('n_2', 'regression_weight'))) %>%
+		group_by_(.dots = group_vars) %>%
+		mutate(n_2 = map2(n_2, regression_weight, ~ .y * .x)) %>%
+		do(smoothed_n = reduce(.$n_2, `+`)) %>%
+		ungroup() %>%
+		mutate(smoothed_p = map(smoothed_n, ~ . / sum(.)))
+
 	lookup_df <- adj %>%
 		select_(.dots = group_vars %>% append(c('p_1', 'n_1'))) %>%
 		distinct_(.dots = group_vars, .keep_all = TRUE) %>%
@@ -166,8 +175,8 @@ compute_derivatives <- function(adj, sigma = 1, ...){
 
 	names(group_vars) <- group_vars
 	out_df %>%
-		left_join(lookup_df, by = group_vars)
-
+		left_join(lookup_df, by = group_vars) %>%
+		left_join(smoother, by = group_vars)
 }
 
 
@@ -182,7 +191,7 @@ compute_derivatives <- function(adj, sigma = 1, ...){
 #' @return a tibble with a column local_H containing the Hessian
 #' (or Riemannian metric) in local coordinates.
 #' @export
-compute_hessian <- function(adj, divergence = 'KL'){
+compute_hessian <- function(adj, divergence = 'DKL', smooth = F){
 
 	select_vars <- c('geoid', 'total', 'local_g')
 	adj <- adj %>% rename(geoid = geoid_1)
@@ -201,16 +210,22 @@ compute_hessian <- function(adj, divergence = 'KL'){
 					 euc     = function(p) diag(length(p)),
 					 cum_euc = cum_euc)
 
-
-	adj %>%
-		mutate(H  = map(p_1,  hessians[[divergence]]),
-			   local_g = map2(D_alpha, H, ~ .x %*% .y %*% t(.x))) %>%
+	if(smooth){
+		out <- adj %>%
+			mutate(H  = map(smoothed_p,  hessians[[divergence]]),
+				   local_g = map2(D_alpha, H, ~ NA_multiply(t(.x), .y)))
+	}else{
+		out <- adj %>%
+			mutate(H  = map(p_1,  hessians[[divergence]]),
+				   local_g = map2(D_alpha, H, ~ NA_multiply(t(.x), .y)))
+	}
+	out %>%
 		select_(.dots = select_vars)
 }
 
 #'
 #' @export
-compute_metric <- function(tracts, data, km = T, sigma = 100, divergence = 'euc'){
+compute_metric <- function(tracts, data, km = T, sigma = 100, divergence = 'euc', smooth = F){
 	out <- tracts[tracts@data$GEOID %in% data$tract,] %>%
 		make_adjacency()
 
@@ -222,8 +237,5 @@ compute_metric <- function(tracts, data, km = T, sigma = 100, divergence = 'euc'
 		adj_with_coords(tracts, km = km) %>%
 		adj_with_geo_distance(tracts) %>%
 		compute_derivatives(sigma = sigma) %>%
-		compute_hessian(divergence = divergence)
+		compute_hessian(divergence = divergence, smooth = smooth)
 }
-
-
-

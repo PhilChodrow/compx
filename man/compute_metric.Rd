@@ -4,7 +4,8 @@
 \alias{compute_metric}
 \title{Compute the Riemannian metric in local coordinates on a grid_data object}
 \usage{
-compute_metric(tracts, data, km = T, sigma = 100, divergence = "euc")
+compute_metric(tracts, data, km = T, sigma = 100, divergence = "euc",
+  smooth = F)
 }
 \arguments{
 \item{divergence}{the divergence function chosen to induce a metric in

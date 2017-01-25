@@ -4,7 +4,7 @@
 \alias{compute_hessian}
 \title{Compute the hessian (or Riemannian metric) at each tract.}
 \usage{
-compute_hessian(adj, divergence = "KL")
+compute_hessian(adj, divergence = "DKL", smooth = F)
 }
 \arguments{
 \item{divergence}{one of c('KL', 'euc', 'cum_euc')}
