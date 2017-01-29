@@ -206,7 +206,7 @@ compute_hessian <- function(adj, divergence = 'DKL', smooth = F){
 		lower %*% t(lower)
 	}
 
-	hessians <- list(DKL     = function(p) diag(1/p^2),
+	hessians <- list(DKL     = function(p) diag(1/p),
 					 euc     = function(p) diag(length(p)),
 					 cum_euc = cum_euc)
 
