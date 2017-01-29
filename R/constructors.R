@@ -135,7 +135,7 @@ add_hessian <- function(adj, divergence = 'DKL', p = 'p_12'){
 		lower %*% t(lower)
 	}
 
-	hessians <- list(DKL      = function(p) diag(1/p),
+	hessians <- list(DKL      = function(p) diag(1/p^2),
 					 euc     = function(p) diag(length(p)),
 					 cum_euc = cum_euc)
 
@@ -198,7 +198,7 @@ make_graph <- function(adj){
 	}else{
 		adj %>%
 			select(geoid_1, geoid_2, dist) %>%
-			igraph::graph_from_data_frame()
+			igraph::graph_from_data_frame(directed = FALSE)
 
 	}
 }
@@ -251,7 +251,7 @@ construct_information_graph <- function(tracts, data, divergence = 'euc'){
 	adj %>%
 		undirect() %>%
 		add_data(data) %>%
-		information_distances(divergence = 'DKL', w = .5) %>%
+		information_distances(divergence = divergence, w = .5) %>%
 		make_graph() %>%
 		add_coordinates(tracts)
 }
