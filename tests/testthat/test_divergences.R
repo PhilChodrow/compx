@@ -4,12 +4,12 @@ library(tidyverse, warn.conflicts = FALSE, quietly = TRUE)
 context('Divergence Functions')
 
 test_that("Divergence equal distributions is 0", {
-	expect_equal(DKL(p = rep(1/10, 10), q = rep(1/10,10)),0)
-	expect_equal(DKL(p = rep(1/5, 5), q = rep(1/5,5)),0)
+	expect_equal(DKL(rep(1/10, 10), rep(1/10,10)), 0)
+	expect_equal(DKL(rep(1/5, 5),   rep(1/5,5)), 0)
 })
 
 test_that("Can't compute divergence of distributions over different lengths", {
-	expect_error(DKL(p = c(1/2, 1/2, 0), q = c(1/2, 1/2)))
+	expect_error(DKL(c(1/2, 1/2, 0), c(1/2, 1/2)))
 })
 
 p <- c(.1, .4, .5)
@@ -42,7 +42,8 @@ test_that("NA_multiply implements expected logic",{
 	delta_4 <- matrix(c(1, 0, 3, 3, 0, 0), 3, 2)
 	H_4     <- diag(c(1, Inf, 1))
 	result  <- NA_multiply(delta_4, H_4)
-	expect(!is.na(result), 'This example should be ok')
+	sum(is.na(result))
+	expect_equal(sum(is.na(result)), 0, info =  'This example should be ok')
 
 	# this one should work too
 
@@ -53,6 +54,10 @@ test_that("NA_multiply implements expected logic",{
 	expect_equal(result, expected_result,tolerance = 1e-10, scale = NULL, message = 'This example should be ok')
 
 })
+
+# should probably include tests for numerical values of various divergences as well
+
+
 
 
 

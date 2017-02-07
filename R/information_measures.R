@@ -38,37 +38,6 @@ simplex_normalize <- function(p){
 	normed
 }
 
-#' Find the Kullback-Leibler divergence of two empirical distributions.
-#' @param p the 'true' distribution
-#' @param q the estimated distribution
-#' @param check whether to check that p and q are valid probability distributions
-#' @return numeric the KL divergence between p and q
-#' @export
-DKL <- function(p,q, check = FALSE){
-	# if(!is.numeric(p) | !is.numeric(q)){
-	# 	return(NaN)
-	# }
-	if(check){
-		if(!simplex_check(p) | !simplex_check(q)){
-			message <- paste0('p or q are not on the simplex: sum(p) = ', sum(p), ' and sum(q) = ', sum(q))
-			warning(message)
-		}
-	}
-	if(length(p) != length(q)){
-		stop('Distribution alphabets are different size')
-	}
-	return(sum(p * log(p/q), na.rm = T))
-}
-
-#' @export
-DJS <- function(p, q, w = NULL){
-	if(is.null(w)){
-		w <- sum(p) / (sum(p) + sum(q))
-	}
-	r <- w * p + (1-w) * q
-	w*DKL(p, r) + (1-w) * DKL(q, r)
-}
-
 
 
 #' Find the entropy of a distribution

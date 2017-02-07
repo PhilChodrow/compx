@@ -29,7 +29,7 @@ affinity_matrix <- function(g, sigma = 1){
 #' expensive for large graphs.
 #' @export
 generalized_laplacian_matrix <- function(input, ...){
-
+	assertthat::assert_that(class(input) %in% c('matrix', 'igraph'))
 	if(class(input) == 'igraph'){
 		A <- affinity_matrix(input, ...)
 	}else{
@@ -40,7 +40,25 @@ generalized_laplacian_matrix <- function(input, ...){
 	L <- solve(D) %*% (D - A)
 }
 
+#' Cluster a graph or affinity matrix.
+#' Output is a kmeans object giving the clusters.
+#' @export
+spectral_cluster <- function(g, sigma = 1, k = 2, nreps = 100){
 
+	A <- affinity_matrix(g, sigma = sigma)
 
+	L   <- generalized_laplacian_matrix(A, sigma)
+	evL <- eigen(L, symmetric = T)
+	Z <- evL$vectors[,(ncol(evL$vectors)-k+1):ncol(evL$vectors)]
 
+	models <- data_frame(n = 1:nreps) %>%
+		dplyr::mutate(model = map(n, ~ kmeans(Z, centers = k))) %>%
+		mutate(perf = map_dbl(model, ~.$tot.withinss))
 
+	model <- models %>%
+		filter(perf == min(perf))
+
+	df <- data_frame(tract = row.names(A), cluster = model$model[[1]]$cluster)
+	g <- g %>% set_vertex_attr('cluster', index = df$tract, value = df$cluster)
+	g
+}

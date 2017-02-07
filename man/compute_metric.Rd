@@ -4,14 +4,14 @@
 \alias{compute_metric}
 \title{Compute the Riemannian metric in local coordinates on a grid_data object}
 \usage{
-compute_metric(tracts, data, km = T, sigma = 100, divergence = "euc",
+compute_metric(tracts, data, km = T, sigma = 100, hessian = euc_,
   smooth = F)
 }
 \arguments{
+\item{grid_data}{a grid_data object}
+
 \item{divergence}{the divergence function chosen to induce a metric in
 information space. One of c('KL', 'euc', 'cum_euc').}
-
-\item{grid_data}{a grid_data object}
 
 \item{coord_names}{the names of the coordinate columns in grid_data}
 }

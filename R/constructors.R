@@ -118,65 +118,19 @@ add_data <- function(adj, data){
 	adj %>%
 		left_join(join_data, by = join_keys_1) %>%
 		left_join(join_data, by = join_keys_2, suffix = c('_1', '_2')) %>%
-		mutate(n_1  = map(data_1, ~.$n),
-			   n_2  = map(data_2, ~.$n),
-			   n_12 = map2(n_1, n_2, ~.x + .y),
-			   p_1  = map(n_1, ~ ./sum(.)),
-			   p_2  = map(n_2, ~ ./sum(.)),
-			   p_12 = map(n_12, ~./sum(.)))
+		mutate(n_1  = map(data_1,    ~.$n),
+			   n_2  = map(data_2,    ~.$n))
 }
 
-#' @export
-add_hessian <- function(adj, divergence = 'DKL', p = 'p_12'){
-	assertthat::assert_that(divergence %in% c('DJS', 'DKL', 'euc'))
-	cum_euc <- function(p){
-		lower <- matrix(0, length(p), length(p))
-		lower[lower.tri(lower, diag = T)] <- 1
-		lower %*% t(lower)
-	}
 
-	hessians <- list(DKL      = function(p) diag(1/p),
-					 euc     = function(p) diag(length(p)),
-					 cum_euc = cum_euc)
+#' We are assuming a divergence function, defined by the user,
+#' that takes in n_1 and n_2 and returns a number. No square rooting
+#' should be necessary; this should be handled in the function itself.
+
+information_distances <- function(adj, divergence){
 
 	adj %>%
-		mutate(H = map(p_12, hessians[[divergence]]))
-}
-
-
-#' @export
-NA_multiply <- function(D_alpha, H){
-	na_locs           <- is.na(t(D_alpha) %*% D_alpha)
-	H[is.infinite(H)] <- 0
-	result            <- t(D_alpha) %*% H %*% D_alpha
-	result[na_locs]   <- NA
-	result
-}
-
-
-#' Early stage: pass hessians as names, pass DJS as a function.
-information_distances <- function(adj, divergence, ...){
-
-	divergences <- list(DKL = NULL,
-						euc = NULL,
-						cum_euc = NULL,
-						DJS = DJS)
-
-	assertthat::assert_that(divergence %in% names(divergences))
-
-
-
-	if(divergence %in% c('DKL', 'euc', 'cum_euc')){
-		adj <- adj %>%
-			add_hessian(divergence, p = 'p_12') %>%
-			mutate(d_alpha = map2(p_1, p_2, ~ .x - .y),
-				   sqdist = map2_dbl(d_alpha, H, NA_multiply),
-				   dist = sqrt(sqdist))
-	}else{
-		adj <- adj %>%
-			mutate(dist = map2_dbl(p_1, p_2, ~ divergences[[divergence]](.x, .y, ...)))
-	}
-	return(adj)
+		mutate(dist = map2_dbl(n_1, n_2, divergence))
 }
 
 #' @export
@@ -235,12 +189,11 @@ add_coordinates <- function(g, tracts, ...){
 	return(g)
 
 	}
-
-
 }
 
+#' The graph?
 #' @export
-construct_information_graph <- function(tracts, data, divergence = 'euc'){
+construct_information_graph <- function(tracts, data, divergence){
 	adj <- tracts[tracts@data$GEOID %in% data$tract,] %>%
 		make_adjacency()
 
@@ -251,9 +204,7 @@ construct_information_graph <- function(tracts, data, divergence = 'euc'){
 	adj %>%
 		undirect() %>%
 		add_data(data) %>%
-		information_distances(divergence = divergence, w = .5) %>%
+		information_distances(divergence) %>%
 		make_graph() %>%
 		add_coordinates(tracts)
 }
-
-

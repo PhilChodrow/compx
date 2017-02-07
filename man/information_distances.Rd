@@ -2,11 +2,15 @@
 % Please edit documentation in R/constructors.R
 \name{information_distances}
 \alias{information_distances}
-\title{Early stage: pass hessians as names, pass DJS as a function.}
+\title{We are assuming a divergence function, defined by the user,
+that takes in n_1 and n_2 and returns a number. No square rooting
+should be necessary; this should be handled in the function itself.}
 \usage{
-information_distances(adj, divergence, ...)
+information_distances(adj, divergence)
 }
 \description{
-Early stage: pass hessians as names, pass DJS as a function.
+We are assuming a divergence function, defined by the user,
+that takes in n_1 and n_2 and returns a number. No square rooting
+should be necessary; this should be handled in the function itself.
 }
 

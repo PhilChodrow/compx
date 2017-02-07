@@ -90,18 +90,24 @@ We can view the metric tensor $g$ as encoding the information we need to measure
 
 ## Computing the Metric Tensor
 
-Because the metric tensor is fundamental to our approach, `compx` includes a function that computes it directly from `tracts` and appropriately keyed `data`. If the keyed data contains no column labeled `t`, then `compx` assumes that all data are from the same time period. The simplest case looks like this: 
+Because the metric tensor is fundamental to our approach, `compx` includes a function that computes it directly from `tracts` and appropriately keyed `data`. If the keyed data contains no column labeled `t`, then `compx` assumes that all data are from the same time period. The simplest case of data looks like this: 
 
 ```{r}
 race_2010 <- detroit_race %>%
 	filter(t == 2010) %>%
 	select(-t)                 # remove the t column if not using it
 
+race_2010
+```
+
+Now we can compute the metric tensor. There are a few arguments to specify here. They are all briefly described in the comments below, and more fully in the package documentation. One thing to note is that `hessian` parameter should be a **function** that takes in a single vector and returns a matrix. So far, `compx` comes bundled with appropriate functions for the KL Divergence (`DKL_`), Euclidean (`euc_`), and cumulative Euclidean (`cum_euc_`) matrices; more are in progress. 
+
+```{r}
 metric_df <- compute_metric(tracts,             # use these tracts
 							race_2010,          # and these data
 							km = T,             # convert spatial units to km
 							sigma = 100,        # for numerical derivatives
-							divergence = 'DKL', # use the KL divergence to compare distributions
+							hessian = DKL_,     # use the KL divergence to compare distributions
 							smooth = T)         # spatial smoothing (avoids singularities)
 ```
 
@@ -161,7 +167,7 @@ metric_df <- compute_metric(tracts,
 							race_temporal, 
 							km = T, 
 							sigma = 100, 
-							divergence = 'DKL',
+							hessian = DKL_,
 							smooth = T)
 ```
 
@@ -231,15 +237,20 @@ t_df  %>%
 
 # Network Analysis
 
-The other main form of analysis enabled by `compx` is network-based analysis used to quantify and identify structure in demographic variation. 
+The other main form of analysis enabled by `compx` is network-based analysis used to quantify and identify structure in demographic variation. Similarly to the `hessian` argument of `compute_metric`, here you need to specify a divergence or comparison function between distributions. It should operate on vectors of nonnegative real numbers `n` and `m` (note: do NOT assume that these are normalized), and return a real number. It should also be symmetric. An example is the Jensen-Shannon metric, defined below in terms of the KL divergence: 
 
 ```{r}
-g <- construct_information_graph(tracts, race_2010, divergence = 'DKL')
+divergence <- function(n,m){
+	p <- n / sum(n)
+	q <- m / sum(m)
+	sqrt(.5 * DKL(p, p+q) + .5*DKL(q, p+q))
+}
+
+g <- construct_information_graph(tracts, race_2010, divergence = divergence)
 g
 ```
 
 `g` is an `igraph` object with edge and node attributes. The `dist` edge attribute reflects how information-geometrically dissimilar are the connected nodes, where this dissimilarity is just the information distance between the nodes, calculated using the metric tensor. It's useful to visualize this network. In the plot below, dissimilar tracts have thin edges between them, while very similar ones are joined by thick edges. 
-
 ```{r, fig.height = 4}
 
 edges <- g %>% as_long_data_frame() %>% tbl_df()
@@ -262,7 +273,7 @@ Comparing to the figures above, you might notice that areas with thin or invisib
 ## The Scale of Segregation
 One useful way to analyze the spatial structure of segregation is via the eigenspectrum of the Laplacian matrix corresponding to the graph, a method inspired by [spectral clustering](http://www.cs.cmu.edu/~aarti/Class/10701/readings/Luxburg06_TR.pdf). In the plot below, large gaps in the spectrum correspond to strong "signals" in the spatial structure; intiutively, it "makes sense" to cut the structure into that many pieces. 
 ```{r, fig.height = 4}
-A   <- affinity_matrix(g, sigma = 1)        # square exponential affinity with specified sigma
+A   <- affinity_matrix(g, sigma = 20)        # square exponential affinity with specified sigma
 L   <- generalized_laplacian_matrix(A)      # L_{rw} in the tutorial cited above
 evL <- eigen(L, symmetric = T)              # compute the spectrum
 
@@ -272,29 +283,54 @@ data.frame(n = 1:30, ev = 1 - rev(evL$values)[1:30]) %>%
 	geom_line() +
 	geom_point() +
 	scale_y_continuous(trans = 'log10') + 
-	geom_vline(xintercept  = 2.5, linetype = 'dashed') + 
-	geom_vline(xintercept  = 7.5, linetype = 'dashed') + 
+	geom_vline(xintercept  = 3.5, linetype = 'dashed') + 
+	geom_vline(xintercept  = 8.5, linetype = 'dashed') + 
 	geom_vline(xintercept = 10.5, linetype = 'dashed') + 
 	theme_bw()
 ```
 
-For example, we see that in Detroit with under the KL divergence, there's a large gap after $n = 2$ and then a smaller one at $n = 7$. Of course, it's important to realize that there is some judgment required in identifying these hard cutoffs -- it's not a single cutoff but the spectrum of $A$ that most fully describes the community structure. 
+For example, we see that in Detroit with under the KL divergence, there's a large gap after $n = 2$ and then a smaller one at $n = 8$. Of course, it's important to realize that there is some judgment required in identifying these hard cutoffs -- it's not a single cutoff but the spectrum of $A$ that most fully describes the community structure. 
 
 ## Spatial Community Detection
 
-We can try to actually identify clusters based on the affinity matrix $A$. There are lots of approaches for finding clusters in an affinity matrix, but a simple and workable one is hierarchical clustering. 
-```{r}
-# do the clustering
-clust <- hclust(as.dist(-A),  method = 'complete')
+We can try to actually identify clusters based on the affinity matrix $A$. Here we use spectral clustering, which exploits our knowledge of the eigenvalues of $A$. The following code will construct the Laplacian matrix $L$, do $k$-means clustering in the eigenspace of $L$, and then assign the resulting clusters as a new vertex attribute to `g`. 
 
-# assign node attributes to g giving the clusters
-ncluster <- 7
+```{r}
+
+set.seed(1234)
+
+k <- 8
+nreps <- 1000
+Z <- evL$vectors[,(ncol(evL$vectors)-k+1):ncol(evL$vectors)]
+
+models <- data_frame(n = 1:nreps) %>% 
+	dplyr::mutate(model = map(n, ~ kmeans(Z, centers = k))) %>% 
+	mutate(perf = map_dbl(model, ~.$tot.withinss))
+
+model <- models %>% 
+	filter(perf == min(perf))
+km <- model$model[[1]]
+    
 g        <- g %>% set_vertex_attr(name = 'cluster', 
 								  index = colnames(A), 
-								  value = clust %>% cutree(ncluster))
+								  value = km$cluster)
+```
 
+We've also provided a convenience function that will do the same thing: 
+
+```{r}
+g <- g %>% spectral_cluster(sigma = 20, k = k, nreps = nreps)
+```
+
+Either way, now we can plot the result: 
+
+```{r}
 # extract as data frame. We already extracted the edges df above. 
 nodes    <- data_frame(x = V(g)$x, y = V(g)$y, cluster = V(g)$cluster)
+
+pal <- scales::brewer_pal(palette = 'Set1')
+pal <- colorRampPalette(pal(9))
+pal <- pal(k)
 
 ggplot() + 
     geom_segment(aes(x = from_x, 
@@ -306,43 +342,28 @@ ggplot() +
     ggthemes::theme_map() +
     scale_size_continuous(range = c(0,1)) + 
     guides(alpha = 'none', color = 'none', size = 'none') + 
-	scale_color_brewer(palette = 'Set1')
+	scale_color_manual(values = pal)
 ```
 
-This is a reasonably strong result; the clustering has detected the predominating division between the white suburbs (green) and the predominantly black urban core (blue), as well as "Mexicantown" (red), the historically distinct community of Grosse Point (yellow), and Hamtramck (brown), an independent town with large European and Asian immigrant populations. Not all clusterings I've worked with have quite
-such intuitive behavior, but all demonstrate promising performance. 
+This is a reasonably strong result; the clustering has detected the predominating division between the white suburbs to the west and the predominantly black urban core, as well as distinct areas like "Mexicantown", Grosse Point, and Hamtramck. It's worth comparing this clustering to a demographic map of Detroit. 
 
 ## Spatiotemporal Networks
 
 It's also possible to use construct networks at multiple time-slices. Just like before, it's necessary to use data that has a `t` column with appropriate values. 
 
 ```{r}
-g <- construct_information_graph(tracts, race_temporal, divergence = 'DKL')
+g <- construct_information_graph(tracts, race_temporal, divergence = divergence)
 ```
 
 When  `t` column is provided, the names of `g` are concatenations of the GEOID of the tract and the corresponding value of $t$. There's an edge between each tract and its corresponding step forward or backward in time. 
 
 ```{r}
-g
-```
-
-We can also cluster on these temporal networks, in just the same fashion as we did before. 
-
-```{r}
-# construct the affinity matrix and do clustering
-A     <- affinity_matrix(g, sigma = 1)
-sigma <- 1
-clust <- hclust(as.dist(-A), method = 'complete')
-
-# assign clusters as a node attribute
-ncluster <- 12
-g        <- g %>% set_vertex_attr(name = 'cluster', 
-								  index = colnames(A), 
-								  value = clust %>% cutree(ncluster))
+k     <- 15
+sigma <- 20
+g     <- g %>% spectral_cluster(sigma = sigma, k = k, nreps = 10)
 ```
 
 It's more complex to visualize these networks in a workable way, but not hard to visualize the clusters over time: 
-
 ```{r, fig.height = 2.5, fig.width = 8}
 
 # get the edges, only including ones that are "within" a time slice. 
@@ -368,49 +389,18 @@ ggplot() +
 					 y = from_y, 
 					 xend = to_x, 
 					 yend = to_y, 
-					 size = exp(-7 * dist^2)), data = edges, color = 'grey40') + 
+					 size = exp(-sigma * dist^2)), data = edges, color = 'grey40') + 
 	geom_point(aes(x = x, y = y, color = as.character(cluster)), size = 1, data = nodes) + 
 	facet_wrap(~t) + 
 	scale_size_continuous(range = c(0,1)) + 
 	ggthemes::theme_map() + 
 	guides(color = FALSE, size = FALSE) + 
-	scale_color_manual(values = pal(ncluster)) 
+	scale_color_manual(values = pal(k)) 
 ```
 
-Currently, this temporal clustering method has some limitations -- tracts don't change demographics very quickly over the time period we are considering, and so clusters tend to be quite persistent. This in itself isn't a bad thing per se, but it's also the case that we generate some slightly counterintuitive clusters this way. Getting useful clusterings is a major area of focus ahead. 
+Currently, this temporal clustering method has some limitations -- tracts don't change demographics very quickly over the time period we are considering, and so clusters tend to be quite persistent. The result of this persistence is that the "first" clusters that this method tends to find are sometimes not very informative -- they are just joining together a few tracts that haven't changed in time at all. So, it's fair to say that more work here is needed. 
 
-However, there's also a substantial amount of signal in the clusters. For example, the clustering detects that the historically white community of Grosse Point (the far eastern tip) has somewhat receded from 1990 to 2010, with its western-most areas being "absorbed" into the predominantly black cluster. This makes sense when we visualize how relative percentages of White and Black residents have changed over time:  
-
-```{r}
-
-# construct a data frame of percentages. 
-percent_df <- race_temporal %>% 
-	filter(t %in% c(1990, 2010)) %>% 
-	group_by(tract, t) %>% 
-	mutate(percent = n /sum(n)) %>%
-	rename(race = group) %>% 
-	filter(race %in% c('Black', 'White')) 
-
-# plot the df 
-pal <- brewer.pal(9, 'Blues') %>% 
-	colorRampPalette()
-
-f_tracts %>%
-	left_join(percent_df, by = c('id' = 'tract')) %>% 
-	tbl_df() %>% 
-	ggplot() +
-	aes(x = long, y = lat, group = group, fill = percent) + 
-	geom_polygon() + 
-	facet_grid(t ~ race) + 
-	ggthemes::theme_map() + 
-	scale_fill_distiller(palette = 'BuPu', direction = 1) + 
-	theme(panel.background = element_rect(fill = 'grey80'))
-	
-
-
-
-
-```
+However, there's also a substantial amount of signal in the clusters. For example, the clustering detects that the historically white community of Grosse Point (the far eastern tip) has somewhat receded from 1990 to 2010, with its western-most areas being "absorbed" into the predominantly black cluster. This is easy to see if you visualize raw percentages in each tract over time. 
 
 # Future Work
 

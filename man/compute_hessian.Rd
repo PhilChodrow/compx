@@ -4,14 +4,14 @@
 \alias{compute_hessian}
 \title{Compute the hessian (or Riemannian metric) at each tract.}
 \usage{
-compute_hessian(adj, divergence = "DKL", smooth = F)
+compute_hessian(adj, hessian = DKL_, smooth = F)
 }
 \arguments{
-\item{divergence}{one of c('KL', 'euc', 'cum_euc')}
-
 \item{tracts}{an spdf}
 
 \item{data}{a tibble containing demographic data}
+
+\item{divergence}{one of c('KL', 'euc', 'cum_euc')}
 
 \item{sigma}{multiplicative constant on the square exponential kernel weights}
 }
