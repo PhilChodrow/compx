@@ -25,7 +25,7 @@ How complex are the patterns of segregation in different cities? Where are the s
 
 ## Spatial Network Analysis
 
-What are the characteristic scales of segregation in a city? How can I visualize these scales? What are the natural spatial clusters from which the city is assembled? `compx` provides tools to approach these questions through network analysis. The core idea is to compute the [*geodesic distance*](https://en.wikipedia.org/wiki/Geodesic) between spatial locales, and use this distance as a graph weighting. Various forms of network analysis--such as spectral analysis and community-detection-- can then be used to characterize the spatial structure of segregation. Learn more about constructing, analyzing, and visualizing these networks [here](https://philchodrow.github.io/compx/clustering.html). 
+What are the characteristic scales of segregation in a city? How can I visualize these scales? What are the natural spatial clusters from which the city is assembled? `compx` provides tools to approach these questions through network analysis. The core idea is to compute the [*geodesic distance*](https://en.wikipedia.org/wiki/Geodesic) between spatial locales, and use this distance as a graph weighting. Various forms of network analysis--such as spectral analysis and community-detection-- can then be used to characterize the spatial structure of segregation. Learn more about constructing, analyzing, and visualizing these networks [here](https://philchodrow.github.io/compx/vignette_clustering.html). 
 
 # Questions, Help, Feedback
 
