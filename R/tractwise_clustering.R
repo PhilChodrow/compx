@@ -62,3 +62,4 @@ spectral_cluster <- function(g, sigma = 1, k = 2, nreps = 100){
 	g <- g %>% set_vertex_attr('cluster', index = df$tract, value = df$cluster)
 	g
 }
+

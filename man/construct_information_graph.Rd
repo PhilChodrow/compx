@@ -4,7 +4,7 @@
 \alias{construct_information_graph}
 \title{The graph?}
 \usage{
-construct_information_graph(tracts, data, divergence)
+construct_information_graph(tracts, data_df, divergence)
 }
 \description{
 The graph?

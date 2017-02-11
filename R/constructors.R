@@ -1,7 +1,7 @@
 #' constructors
 #' @name constructors
 #' @docType package
-#' @import tidyverse sp maptools rgeos
+#' @import tidyverse sp maptools rgeos igraph
 NULL
 
 #' Construct a lookup data frame from an SPDF object
@@ -22,7 +22,7 @@ id_lookup <- function(tracts, key_col = 'GEOID'){
 make_adjacency <- function(tracts, ...){
 	ids <- id_lookup(tracts, ...)
 
-	gRelate(tracts, byid = TRUE, pattern = '****1****') %>%
+	rgeos::gRelate(tracts, byid = TRUE, pattern = '****1****') %>%
 		as.data.frame() %>%
 		rownames_to_column('id_1') %>%
 		tbl_df() %>%
@@ -157,11 +157,35 @@ make_graph <- function(adj){
 	}
 }
 
+
+add_n <- function(h, data_df){
+
+	lookup <- data_df %>%
+		tidyr::nest_(key_col = 'n_col', nest_cols = c('group', 'n')) %>%
+		dplyr::mutate(n = purrr::map(n_col, ~.$n))
+
+	valid_names <- igraph::V(h)$name
+
+	if('t' %in% names(lookup)){
+		lookup <- lookup %>%
+			unite(col = key, tract, t)
+	}else{
+		lookup <- lookup %>%
+			mutate(key = tract)
+	}
+
+	lookup <- lookup %>%
+		filter(key %in% valid_names)
+
+	h %>% igraph::set.vertex.attribute('n', index = lookup$key, value = lookup$n)
+}
+
+
 #' @export
 add_coordinates <- function(g, tracts, ...){
 	ids <- id_lookup(tracts, ...)
 
-	centroids <- gCentroid(tracts,byid=TRUE)
+	centroids <- rgeos::gCentroid(tracts,byid=TRUE)
 
 	coords <- centroids %>%
 		as.data.frame() %>%
@@ -193,18 +217,19 @@ add_coordinates <- function(g, tracts, ...){
 
 #' The graph?
 #' @export
-construct_information_graph <- function(tracts, data, divergence){
-	adj <- tracts[tracts@data$GEOID %in% data$tract,] %>%
+construct_information_graph <- function(tracts, data_df, divergence){
+	adj <- tracts[tracts@data$GEOID %in% data_df$tract,] %>%
 		make_adjacency()
 
-	if('t' %in% names(data)){
+	if('t' %in% names(data_df)){
 		adj <- adj %>%
-			add_temporal(unique(data$t))
+			add_temporal(unique(data_df$t))
 	}
 	adj %>%
 		undirect() %>%
-		add_data(data) %>%
+		add_data(data_df) %>%
 		information_distances(divergence) %>%
 		make_graph() %>%
+		add_n(data_df) %>%
 		add_coordinates(tracts)
 }
