@@ -1,0 +1,280 @@
+---
+title: "Analyzing Spatial Segregation with Information Geometry"
+subtitle: "Computing with the Spatial Metric Tensor"
+author: "Phil Chodrow"
+date: "February 10th, 2017"
+output: 
+  html_document:
+    theme: sandstone
+    highlight: tango
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Introduction
+
+This document is an introduction to information-geometric techniques for the analysis of spatial segregation and inequality using the `compx` package for the `R` programming language. Get `compx` by running: 
+
+```{r, eval = FALSE}
+# install.packages('devtools') if necessary
+devtools::install_github('PhilChodrow/compx')
+library(compx)
+```
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+library(compx)
+```
+
+
+The core situation we consider is one in which our data consist of counts in two or more categories, distributed in space. A standard example is demographic census data, in which the categories might be racial groups, and the spatial units tracts. This document does not focus on mathematical details of the methods, which will be explained in a forthcoming paper. Rather, the focus is on the intuition behind various analytical methods, and how to carry them out in order to learn about spatial separation with freely-available software tools. 
+
+To prepare data and analyze outputs of `compx` functions, we will also need the following packages: 
+
+```{r, warning = FALSE, message = FALSE}
+library(tidyverse)    # data import, manipulation, and viz
+library(maptools)     # plot the tracts
+library(RColorBrewer) # for plots
+```
+
+# Data inputs
+
+The functions provided by package `compx` assume that your data is expressed in two components. The first is a `SpatialPolygonsDataFrame` (`spdf`) containing geographic polygons ("tracts"). For illustrative purposes, `compx` comes bundled with an `spdf` with the Census tracts for Wayne County, Michigan, which includes the urban core of Detroit, an oft-analyzed city in quantitative segregation studies. The tracts were originally accessed via the `R` package `tigris`. 
+
+```{r}
+detroit_tracts %>% plot()
+```
+
+The second data input must be a demographic table with class in `c('tbl_df', 'tbl', 'data.frame')`, which I will refer colloquially to as a "data frame." `compx` includes an example in `detroit_race`, giving racial demographic counts for each tract for decennial Censuses 1970, 1980, 1990, 2000, 2010. Due to changing questions and collection methods, only 1990 data and later is comparable with 2010. The demographic data was assembled and normalized by the [Project on Diversity and Disparities](https://s4.ad.brown.edu/Projects/Diversity/Researcher/LTBDDload/Default.aspx) at Brown University.
+
+```{r}
+detroit_race
+```
+
+Note that `detroit_race` contains one row per combination of tract, time, and racial group. `compx` expects your demographic data to be in this tidy (or "long") format. If it's in a different shape (e.g. with a column for each racial group), you should use `dplyr` and `tidyr` packages to format it appropriately. 
+
+## Required Columns
+
+Three columns are required: 
+
+1. `tract`, the *key* relating the data the corresponding `spdf`. `compx` assumes that `tract` matches the `GEOID` column of `spdf@data`. 
+2. `group`, the demographic category (such as racial group, in this case). 
+3. `n`, the count of members of `group` in each `tract`. 
+
+Additionally, you may include an optional column for time `t`. `compx` functions will automatically use this column of detected; if you don't want to do temporal analysis, you should delete the $t$ column if you have one. Any additional columns are ignored.  
+
+## Data Cleaning
+
+Before going any further, let's do a bit of cleaning to ensure that we are only analyzing with tracts for which there is a reasonable amount of data available. 
+
+```{r}
+tracts_to_use <- detroit_race %>% 
+	group_by(tract, t) %>%
+	summarise(n = sum(n)) %>%
+	filter(n > 100) 
+
+tracts <- detroit_tracts[detroit_tracts@data$GEOID %in% tracts_to_use$tract, ]
+
+f_tracts <- tracts %>%         # for plotting later
+	fortify(region = 'GEOID')
+```
+
+# The Information Manifold
+
+## The Animating Idea
+
+Our analytical approach is motivated by [*information geometry*](https://en.wikipedia.org/wiki/Information_geometry). The core notion of information geometry is to view the data as lying on an *information manifold*, and then use some simple tools of differential geometry to study that manifold's properties. 
+
+The fundamental manifold property is the *metric tensor* $g$. The metric tensor contains complete information on how distances in information space are bent and curved, depending on where we are. It may therefore be used to compute distances. If $p, q, r \in M$, then, provided $p,q,$ and $r$ are sufficiently close, the *geodesic distance* between $q$ and $r$ is approximately 
+
+$$ d(q, r) \approx \sqrt{g_p(q - r, q - r)}\;.$$
+
+When $g = I$, the identity matrix, this formula reduces to $d(q,r) \approx \lVert q-r \rVert$, the Euclidean distance. When $g$ differs substantially from $I$, we get more interesting behavior. 
+
+We can view the metric tensor $g$ as encoding the information we need to measure distances based on information, rather than on geography alone. A related and important idea of the metric tensor is that it encodes variation -- places where the components of the metric tensor are large correspond to boundary areas between different demographic clusters. 
+
+## Computing the Metric Tensor
+
+Because the metric tensor is fundamental to our approach, `compx` includes a function that computes it directly from `tracts` and appropriately keyed `data`. If the keyed data contains no column labeled `t`, then `compx` assumes that all data are from the same time period. The simplest case of data looks like this: 
+
+```{r}
+race_2010 <- detroit_race %>%
+	filter(t == 2010) %>%
+	select(-t)                 # remove the t column if not using it
+
+race_2010
+```
+
+Now we can compute the metric tensor. There are a few arguments to specify here. They are all briefly described in the comments below, and more fully in the package documentation. One thing to note is that `hessian` parameter should be a **function** that takes in a single vector and returns a matrix. So far, `compx` comes bundled with appropriate Hessian functions for the KL Divergence (`DKL_`), Euclidean (`euc_`), and cumulative Euclidean (`cum_euc_`) matrices; more are in progress. 
+
+```{r}
+metric_df <- compute_metric(tracts,             # use these tracts
+							race_2010,          # and these data
+							km = T,             # convert spatial units to km
+							sigma = 100,        # for numerical derivatives
+							hessian = DKL_,     # use the KL divergence to compare distributions
+							smooth = T)         # spatial smoothing (avoids singularities)
+```
+
+In addition to the tracts and data parameters, `compute_metric` also allows users to specify whether length should be measured in km or degrees long/lat; the divergence function to use when comparing distributions, and `sigma`, a technical parameter relating to the computation of numerical derivatives required to compute the metric tensor. The `smooth` parameter controls whether mild spatial smoothing is used to avoid singularities, and is recommended for use. 
+
+The output of `compute_metric` is a data frame, keyed by geoid, which gives the total population of the tract as well as a list-column with the metric tensor in local coordinates. Since we didn't give a time column, there are only two local coordinates *x* and *y*. 
+
+```{r}
+metric_df %>% head()
+```
+
+We can also take a quick peek at the metric tensor itself. For example, the tensors corresponding to the first two entries of `metric_df` are: 
+
+```{r}
+metric_df$local_g %>% head(2)
+```
+
+The metric tensor is a symmetric matrix. Roughly, $g_{ii}$ encodes the strength of the dependence on the frequency field on the $i$th coordinate. Thus, if we focus on 
+```{r}
+metric_df$local_g[[1]]
+```
+we can compare the entry of ```r metric_df$local_g[[1]][1,1] ``` in the `x` component to ```r metric_df$local_g[[1]][2,2] ``` for the `y` component to get a sense for the direction in which the demographic distribution is changing most rapidly. In this case, it's the $x$ direction. Intuitively, if we stood at the point $(x,y)$ and looked east or west, we'd say more difference from where we were standing than if we looked north or south. 
+
+## Analyzing the Metric Tensor
+
+To visualize the metric structure, it's usually necessary to apply a scalar function to the metric tensor. Good ones are the trace and the square root of the determinant, both of which are usefully interpretable from the information-geometric point of view. These are: 
+
+$$ \begin{align} \text{tr } g &= \sum_i \lambda_i \\ \sqrt{|\text{det } g|} & = \sqrt{\prod_i |\lambda_i|} \end{align} \;,$$
+
+where $\lambda_i$ is the $i$th eigenvalue of $g$. While these formulae are a bit abstruse, the formulae actually point out how these measures behave. The trace is large when *at least one* eigenvalue is large, which occurs when demographic trends are changing rapidly in *at least one direction*. On the other hand, the determinant is large when *all* eigenvalues are large, which occurs when demographic trends are changing rapidly in *all* directions. What this means in practice is: 
+
+- The **trace** is tends to be high in cities with **long, linear boundaries**. 
+- The **determinant** tends to be high in cities with **small, curvy "pockets"* of variation. 
+
+Let's compute these two quantities: 
+```{r}
+metric_df <- metric_df %>% 
+	mutate(trace = map_dbl(local_g, . %>% diag() %>% sum()),
+		   det   = map_dbl(local_g, . %>% det() %>% abs() %>% sqrt()))
+metric_df %>% head()
+```
+
+It's useful to plot these scalars to see how they behave visually. For example, here's the trace: 
+
+```{r, fig.height = 4}
+f_tracts %>% 
+	left_join(metric_df, by = c('id' = 'geoid')) %>% 
+	ggplot() + 
+	aes(x = long, y = lat, fill = trace, group = group) + 
+	geom_polygon() + 
+	viridis::scale_fill_viridis(option = 'magma', trans = 'log10') + 
+	ggthemes::theme_map() 
+
+ggsave('../test.pdf')
+```
+
+One way to think about the more intense areas with higher traces is that they are areas of *transition*. If you compare this visualization to, e.g. UVA's [Racial Dot Map](https://demographics.virginia.edu/DotMap/index.html) you'll find that the lighter areas correspond to the predominating white/black boundary, as well as smaller subdivisions. 
+
+## Correlation of Measures
+
+While the trace and determinant are separate quantities with separate interpretations, they will tend to rather strongly correlated: 
+
+```{r, fig.height = 4}
+
+metric_df %>% 
+	ggplot() + 
+	aes(x = trace, y = det) + 
+	geom_point() + 
+	theme_bw() + 
+	scale_x_continuous(trans = 'log10') + 
+	scale_y_continuous(trans = 'log10') 
+```
+
+# Incorporating Time
+
+`compx` tries to make it easy for you to incorporate time into your analysis as well. To do this, you just need to make sure that your data has a `t` column with appropriate integer or numeric values. Then, `compute_metric` will work just as before. 
+
+```{r}
+race_temporal <- detroit_race %>%
+	filter(t %in% c(1990, 2000, 2010))           # now we don't remove the t column
+	
+metric_df <- compute_metric(tracts, 
+							race_temporal, 
+							km = T, 
+							sigma = 100, 
+							hessian = DKL_,
+							smooth = T)
+```
+
+Note that this computation is likely to take longer, as we now have essentially three times as many data points on which to compute. 
+
+This version of `metric_df` is different in two respects: 
+
+```{r}
+metric_df %>% head()
+```
+
+First, there's a `t` column for time. Second, the metric tensor is now `3 x 3`, which reflects the fact that we've added a third coordinate (time). 
+
+```{r}
+metric_df$local_g[[1]]
+```
+
+In general, it's not a good idea to directly compare temporal components of the metric tensor to spatial ones, since they have different units. In this case, the spatial components have units of kilometers, but the temporal ones have units of years. However, it's not wrong to interpret this result as saying that, at this point in space and time, the demographic composition changes more when you move a km in space (especially north-south) than when you move a year in time. 
+
+Just like before, we can apply some scalar functions to extract information about the metric tensor. The spatial trace is  the sum of the first two diagonal entries, corresponding to the components of the metric tensor that encode spatial (not temporal) variability. 
+
+```{r, fig.height = 2.5, fig.width = 8}
+trace_df <- metric_df %>% 
+	mutate(trace = map_dbl(local_g, ~ .[1:2, 1:2] %>% diag() %>% sum()))
+
+f_tracts %>% 
+	left_join(trace_df, by = c('id' = 'geoid')) %>% 
+	ggplot() + 
+	aes(x = long, y = lat, fill = trace, group = group) + 
+	geom_polygon() + 
+	viridis::scale_fill_viridis(option = 'magma', trans = 'log10') + 
+	ggthemes::theme_map() + 
+	facet_wrap(~t)
+```
+
+The third component of the metric tensor quantifies the dependence on time. We can also extract that and visualize it: 
+
+```{r, fig.height = 2.5, fig.width = 8}
+t_df <- metric_df %>% 
+	mutate(temporal = map_dbl(local_g, ~ .[3, 3]))
+
+f_tracts %>% 
+	left_join(t_df, by = c('id' = 'geoid')) %>% 
+	ggplot() + 
+	aes(x = long, y = lat, fill = temporal, group = group) + 
+	geom_polygon() + 
+	viridis::scale_fill_viridis(option = 'magma', trans = 'log10') + 
+	ggthemes::theme_map() + 
+	facet_wrap(~t)
+```
+
+We can see that, the predominantly white suburbs toward the west have generally experienced greater demographic change over time than the prodominantly black urban core toward the northeast. We also observe that the temporal component of the metric tensor tends to correlate with the spatial component of the previosu visualization. So, spatial transition areas also tend to be temporal transition areas. This makes sense if you think that the dynamics of population composition are continuous in space, so that change happens at the boundaries. However, this correlation is relatively weak. 
+
+```{r, fig.height = 2.5, fig.width = 8}
+
+t_df  %>% 
+	mutate(spatial = map_dbl(local_g, ~ .[1:2, 1:2] %>% diag() %>% sum())) %>% 
+	ggplot() + 
+	aes(x = spatial, y = temporal) + 
+	geom_point() + 
+	scale_y_continuous(trans = 'log') + 
+	scale_x_continuous(trans = 'log') + 
+	geom_smooth() + 
+	facet_wrap(~t) + 
+	theme_bw()
+
+```
+
+
+Thanks for reading! If you enjoyed this vignette and are interested to learn more about `compx`, take a look at the [next vignette](https://philchodrow.github.io/compx/clustering.html) on studying the scales of segregation and finding spatial structure via network analysis  
+
+# Session Information
+
+```{r}
+sessionInfo()
+```
