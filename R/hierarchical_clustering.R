@@ -4,18 +4,22 @@
 #' @import tidyverse igraph
 NULL
 
-#' Compute the merge list for a single pass of agglomerative hierarchical clustering. 
+#' Compute the merge list for a single pass of agglomerative hierarchical clustering.
 #' The result is a df in which each row corresponds to a pair of nodes
 #' and a pair is present if each node is the nearest neighbor
-#' of the other. Also includes stage information (labels) 
-#' and the loss associated with agglomerating the two nodes. 
+#' of the other. Also includes stage information (labels)
+#' and the loss associated with agglomerating the two nodes.
 #' @param h the graph to cluster. Must have "stage" information for the nodes
 #' @param current_stage the number of agglomerations performed so far
 #' @param divergence the divergence function used to compute distances between nodes
 #' @return a data frame giving the merges and loss associated with each one
 make_merge_list <- function(h, divergence, current_stage = 0){
 
-	h %>%
+	if(length(E(h)) == 0){
+		h <- h %>% add_edges(V(h)[1:2])
+	}
+
+	m_list <- h %>%
 		as_long_data_frame() %>%
 		tbl_df() %>%
 		select(from, to, from_n, to_n, from_stage, to_stage) %>%
@@ -83,9 +87,9 @@ empty_hclust <- function(n){
 	a
 }
 
-#' Sort a merge list so that the corresponding hierarchical clustering is indeed greedy. 
+#' Sort a merge list so that the corresponding hierarchical clustering is indeed greedy.
 #' @param merges the merge list to sort
-#' @return the merge list sorted, with appropriately relabeled indices. 
+#' @return the merge list sorted, with appropriately relabeled indices.
 sort_merges <- function(merges){
 
 	merges <- merges %>%
@@ -138,12 +142,12 @@ sort_merges <- function(merges){
 #' Cluster a graph using information-maximizing agglomerative clustering
 #' and a custom, user-specified divergence function.
 #' @param g the graph to cluster
-#' @param divergence the divergence function to use for clustering. 
-#' Must take as an argument a pair of node attributes n. 
+#' @param divergence the divergence function to use for clustering.
+#' Must take as an argument a pair of node attributes n.
 #' @return an object of class `hclust` summarising the clustering, including
-#' cluster labels and the cluster heights. Suitable for use with `cutree` and 
+#' cluster labels and the cluster heights. Suitable for use with `cutree` and
 #' all other methods used with `hclust` objects, although `plot` is a bit janky
-#' because we haven't implemented ordering. 
+#' because we haven't implemented ordering.
 #' @export
 info_cluster <- function(g, divergence){
 	a <- empty_hclust(length(V(g)))
