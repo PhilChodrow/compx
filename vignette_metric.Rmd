@@ -38,6 +38,8 @@ To prepare data and analyze outputs of `compx` functions, we will also need the 
 library(tidyverse)    # data import, manipulation, and viz
 library(maptools)     # plot the tracts
 library(RColorBrewer) # for plots
+library(ggthemes)     # for theme_map
+library(viridis)      # for color scales
 ```
 
 # Data inputs
@@ -111,12 +113,19 @@ race_2010
 Now we can compute the metric tensor. There are a few arguments to specify here. They are all briefly described in the comments below, and more fully in the package documentation. One thing to note is that `hessian` parameter should be a **function** that takes in a single vector and returns a matrix. So far, `compx` comes bundled with appropriate Hessian functions for the KL Divergence (`DKL_`), Euclidean (`euc_`), and cumulative Euclidean (`cum_euc_`) matrices; more are in progress. 
 
 ```{r}
-metric_df <- compute_metric(tracts,             # use these tracts
-							race_2010,          # and these data
-							km = T,             # convert spatial units to km
-							sigma = 100,        # for numerical derivatives
-							hessian = DKL_,     # use the KL divergence to compare distributions
-							smooth = T)         # spatial smoothing (avoids singularities)
+
+data  <- race_2010 %>%
+	filter(tract %in% tracts@data$GEOID) %>%
+	group_by(tract) %>%
+	ungroup() 
+	
+metric_df <- compute_metric(tracts, 
+							race_2010, 
+							km = T,
+							sigma = .1,
+							hessian = DKL_,
+							smooth = T)
+
 ```
 
 In addition to the tracts and data parameters, `compute_metric` also allows users to specify whether length should be measured in km or degrees long/lat; the divergence function to use when comparing distributions, and `sigma`, a technical parameter relating to the computation of numerical derivatives required to compute the metric tensor. The `smooth` parameter controls whether mild spatial smoothing is used to avoid singularities, and is recommended for use. 
@@ -130,12 +139,12 @@ metric_df %>% head()
 We can also take a quick peek at the metric tensor itself. For example, the tensors corresponding to the first two entries of `metric_df` are: 
 
 ```{r}
-metric_df$local_g %>% head(2)
+metric_df$g %>% head(2)
 ```
 
 The metric tensor is a symmetric matrix. Roughly, $g_{ii}$ encodes the strength of the dependence on the frequency field on the $i$th coordinate. Thus, if we focus on 
 ```{r}
-metric_df$local_g[[1]]
+metric_df$g[[1]]
 ```
 we can compare the entry of ```r metric_df$local_g[[1]][1,1] ``` in the `x` component to ```r metric_df$local_g[[1]][2,2] ``` for the `y` component to get a sense for the direction in which the demographic distribution is changing most rapidly. In this case, it's the $x$ direction. Intuitively, if we stood at the point $(x,y)$ and looked east or west, we'd say more difference from where we were standing than if we looked north or south. 
 
@@ -153,23 +162,22 @@ where $\lambda_i$ is the $i$th eigenvalue of $g$. While these formulae are a bit
 Let's compute these two quantities: 
 ```{r}
 metric_df <- metric_df %>% 
-	mutate(trace = map_dbl(local_g, . %>% diag() %>% sum()),
-		   det   = map_dbl(local_g, . %>% det() %>% abs() %>% sqrt()))
+	mutate(trace = map_dbl(g, . %>% diag() %>% sum()),
+		   det   = map_dbl(g, . %>% det() %>% abs() %>% sqrt()))
 metric_df %>% head()
 ```
 
 It's useful to plot these scalars to see how they behave visually. For example, here's the trace: 
 
 ```{r, fig.height = 4}
+library(scales)
 f_tracts %>% 
 	left_join(metric_df, by = c('id' = 'geoid')) %>% 
 	ggplot() + 
 	aes(x = long, y = lat, fill = trace, group = group) + 
 	geom_polygon() + 
-	viridis::scale_fill_viridis(option = 'magma', trans = 'log10') + 
-	ggthemes::theme_map() 
-
-ggsave('../test.pdf')
+	scale_fill_viridis(option = 'magma', trans = 'log10', limits = c(NA, 1e1), oob = squish) + 
+	theme_map() 
 ```
 
 One way to think about the more intense areas with higher traces is that they are areas of *transition*. If you compare this visualization to, e.g. UVA's [Racial Dot Map](https://demographics.virginia.edu/DotMap/index.html) you'll find that the lighter areas correspond to the predominating white/black boundary, as well as smaller subdivisions. 
@@ -199,8 +207,8 @@ race_temporal <- detroit_race %>%
 	
 metric_df <- compute_metric(tracts, 
 							race_temporal, 
-							km = T, 
-							sigma = 100, 
+							km = T,
+							sigma = .1,
 							hessian = DKL_,
 							smooth = T)
 ```
@@ -225,15 +233,15 @@ Just like before, we can apply some scalar functions to extract information abou
 
 ```{r, fig.height = 2.5, fig.width = 8}
 trace_df <- metric_df %>% 
-	mutate(trace = map_dbl(local_g, ~ .[1:2, 1:2] %>% diag() %>% sum()))
+	mutate(trace = map_dbl(g, ~ .[1:2, 1:2] %>% diag() %>% sum()))
 
 f_tracts %>% 
 	left_join(trace_df, by = c('id' = 'geoid')) %>% 
 	ggplot() + 
 	aes(x = long, y = lat, fill = trace, group = group) + 
 	geom_polygon() + 
-	viridis::scale_fill_viridis(option = 'magma', trans = 'log10') + 
-	ggthemes::theme_map() + 
+	scale_fill_viridis(option = 'magma', limits = c(NA, 1e1), trans = 'log10', oob = squish) + 
+	theme_map() + 
 	facet_wrap(~t)
 ```
 
@@ -241,24 +249,23 @@ The third component of the metric tensor quantifies the dependence on time. We c
 
 ```{r, fig.height = 2.5, fig.width = 8}
 t_df <- metric_df %>% 
-	mutate(temporal = map_dbl(local_g, ~ .[3, 3]))
+	mutate(temporal = map_dbl(g, ~ .[3, 3]))
 
 f_tracts %>% 
 	left_join(t_df, by = c('id' = 'geoid')) %>% 
 	ggplot() + 
 	aes(x = long, y = lat, fill = temporal, group = group) + 
 	geom_polygon() + 
-	viridis::scale_fill_viridis(option = 'magma', trans = 'log10') + 
-	ggthemes::theme_map() + 
+	scale_fill_viridis(option = 'magma', trans = 'log10', limits = c(NA, 1e0), oob = squish) + 
+	theme_map() + 
 	facet_wrap(~t)
 ```
 
 We can see that, the predominantly white suburbs toward the west have generally experienced greater demographic change over time than the prodominantly black urban core toward the northeast. We also observe that the temporal component of the metric tensor tends to correlate with the spatial component of the previosu visualization. So, spatial transition areas also tend to be temporal transition areas. This makes sense if you think that the dynamics of population composition are continuous in space, so that change happens at the boundaries. However, this correlation is relatively weak. 
 
 ```{r, fig.height = 2.5, fig.width = 8}
-
 t_df  %>% 
-	mutate(spatial = map_dbl(local_g, ~ .[1:2, 1:2] %>% diag() %>% sum())) %>% 
+	mutate(spatial = map_dbl(g, ~ .[1:2, 1:2] %>% diag() %>% sum())) %>% 
 	ggplot() + 
 	aes(x = spatial, y = temporal) + 
 	geom_point() + 
@@ -267,11 +274,10 @@ t_df  %>%
 	geom_smooth() + 
 	facet_wrap(~t) + 
 	theme_bw()
-
 ```
 
 
-Thanks for reading! If you enjoyed this vignette and are interested to learn more about `compx`, take a look at the [next vignette](https://philchodrow.github.io/compx/clustering.html) on studying the scales of segregation and finding spatial structure via network analysis  
+Thanks for reading! If you enjoyed this vignette and are interested to learn more about `compx`, take a look at the [next vignette](https://philchodrow.github.io/compx/vignette_clustering.html) on studying the scales of segregation and finding spatial structure via network analysis  
 
 # Session Information
 
