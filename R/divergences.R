@@ -80,6 +80,7 @@ DKL_ <- function(base){
 
 #' Euclidean
 #' @inherit DKL_
+#' @export
 euc_ <- function(base){
 
 	diag(length(base))
