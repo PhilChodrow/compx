@@ -160,24 +160,13 @@ compute_derivatives <- function(adj, sigma = 1, ...){
 		mutate(W = map(W, ~ diag(., nrow = length(.)))) %>%
 		mutate(D_alpha = pmap(list(X, Y, W), do_regression))
 
-	smoother <- adj %>%
-		mutate(regression_weight = exp(- sigma * distance^2)) %>%
-		select_(.dots = group_vars %>% append(c('n_2', 'regression_weight'))) %>%
-		group_by_(.dots = group_vars) %>%
-		mutate(n_2 = map2(n_2, regression_weight, ~ .y * .x)) %>%
-		do(smoothed_n = reduce(.$n_2, `+`)) %>%
-		ungroup()
-
-	lookup_df <- adj %>%
-		select_(.dots = group_vars %>% append(c('p_1', 'n_1'))) %>%
-		distinct_(.dots = group_vars, .keep_all = TRUE) %>%
+	P <- adj %>%
 		mutate(total = map_dbl(n_1, sum)) %>%
-		select(-n_1)
+		select(geoid_1, p_1, total) %>%
+		distinct(geoid_1, .keep_all = T)
+	out_df %>% left_join(P, by = c('geoid_1' = 'geoid_1'))
 
-	names(group_vars) <- group_vars
-	out_df %>%
-		left_join(lookup_df, by = group_vars) %>%
-		left_join(smoother, by = group_vars)
+
 }
 #
 #
@@ -192,7 +181,7 @@ compute_derivatives <- function(adj, sigma = 1, ...){
 #' @return a tibble with a column local_H containing the Hessian
 #' (or Riemannian metric) in local coordinates.
 #' @export
-compute_hessian <- function(adj, hessian = DKL_, smooth = F){
+compute_hessian <- function(adj, hessian = DKL_){
 
 	select_vars <- c('geoid', 'total', 'g')
 	adj <- adj %>% rename(geoid = geoid_1)
@@ -202,23 +191,17 @@ compute_hessian <- function(adj, hessian = DKL_, smooth = F){
 		 adj <- adj %>% rename(t = t_1)
 	}
 
-	if(smooth){
-		out <- adj %>%
-			mutate(smoothed_p = map(smoothed_n, ~ . / sum(.)),
-				   H  = map(smoothed_p,  hessian),
-				   g = map2(D_alpha, H, ~ NA_multiply(t(.x), .y)))
-	}else{
-		out <- adj %>%
-			mutate(H  = map(p_1,  hessian),
-				   g = map2(D_alpha, H, ~ NA_multiply(t(.x), .y)))
-	}
+	out <- adj %>%
+		mutate(H  = map(p_1,  hessian),
+			   g = map2(D_alpha, H, ~ NA_multiply(t(.x), .y)))
+
 	out %>%
 		select_(.dots = select_vars)
 }
 
 #' Compute the metric df
 #' @export
-compute_metric <- function(tracts, data, km = T, sigma = 100, hessian = euc_, smooth = F){
+compute_metric <- function(tracts, data, km = T, sigma = 100, hessian = euc_){
 	tracts <- spTransform(tracts, CRS("+proj=longlat +datum=WGS84"))
 
 	out <- tracts[tracts@data$GEOID %in% data$tract,] %>%
@@ -232,74 +215,5 @@ compute_metric <- function(tracts, data, km = T, sigma = 100, hessian = euc_, sm
 		adj_with_coords(tracts, km = km) %>%
 		adj_with_geo_distance(tracts) %>%
 		compute_derivatives(sigma = sigma) %>%
-		compute_hessian(hessian = hessian, smooth = smooth)
+		compute_hessian(hessian = hessian)
 }
-
-# ----------
-#' no temporal functionality yet, needs to be added. Little project for today.
-#' Keep an eye on possible performance issues for large maps.
-#
-# compute_metric <- function(tracts, data, km = T, sigma_s = .5, sigma_t = .1, hessian = euc_){
-# 	data <- data %>%
-# 		spread(key = group, value = n, fill = 0)
-#
-# 	tracts <- tracts[tracts@data$GEOID %in% data$tract,]
-#
-# 	data   <- data[match(tracts@data$GEOID, data$tract),]
-# 	coords <- coords_df(tracts, T)
-# 	coords <- coords[match(tracts@data$GEOID, coords$geoid),]
-#
-# 	geo_distances <- dist(coords[,c('x', 'y')], method = 'euclidean') %>% as.matrix()
-# 	W             <- exp(-geo_distances^2 / (2*sigma_s))
-#
-# 	X   <- coords %>% select(x,y) %>% as.matrix()
-# 	N   <- data %>%
-# 		select(-tract) %>%
-# 		as.matrix()
-# 	Y <- N / rowSums(N)
-#
-# 	do_reg <- function(i){
-# 		x <- (sweep(X, 2, X[i,]))[-i,]
-# 		y <- (sweep(Y, 2, Y[i,]))[-i,]
-# 		w <- diag(W[i,])[-i,-i]
-# 		(solve((t(x) %*% w) %*% x) %*% t(x)) %*% (w %*% y)
-# 	}
-#
-# 	data_frame(i = 1:nrow(coords),
-# 			   geoid = tracts@data$GEOID) %>%
-# 		mutate(D_alpha = map(i, do_reg),
-# 			   p = map(i, ~Y[.,]),
-# 			   H = map(p, ~ .5 * hessian(.)),
-# 			   g = map2(D_alpha, H, ~ NA_multiply(t(.x), .y))) %>%
-# 		select(-i)
-# }
-# #
-# #
-# # library(scales)
-# # sigma_s  <- .2
-# # sigma_t <- 1
-# # sigma_smooth <- 2
-# #
-# # data   <- race_2010 %>%
-# # 	filter(tract %in% tracts@data$GEOID) %>%
-# # 	group_by(tract) %>%
-# # 	filter(sum(n) > 10) %>%
-# # 	ungroup() %>%
-# # 	rbf_smoother(tracts, sigma = sigma_smooth)
-# #
-# #
-# # metric_df <- compute_metric(tracts, data, km = T, sigma_s = .2, sigma_t = .1, hessian = DKL_)
-# #
-# # metric_df <- metric_df %>%
-# # 	mutate(vol = map_dbl(g, . %>% det %>% abs %>% sqrt),
-# # 		   trace = map_dbl(g, . %>% diag %>% sum))
-# # metric_df$tract <- coords$geoid
-# # metric_df <- metric_df %>%
-# # 	mutate(hisp = map_dbl(D_alpha, ~.[1,2]))
-# #
-# # f_tracts %>%
-# # 	left_join(metric_df, by = c('id' = 'tract')) %>%
-# # 	ggplot() +
-# # 	geom_polygon() +
-# # 	aes(x = long, y = lat, group = group, fill = trace) +
-# # 	viridis::scale_fill_viridis(trans = 'log10', oob = squish, limits = c(1e-2, 1e0))

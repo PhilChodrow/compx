@@ -32,12 +32,30 @@ kernel_matrix <- function(X, sigma = c(1,1,10)){
 	return(K)
 }
 
-rbf_smoother <- function(X, N, sigma = c(1,1,10)){
+
+rbf_matrix_smoother <- function(X, N, sigma = c(1,1,10)){
 	K <- kernel_matrix(X, sigma)
 	unnorm <- t(t(N) %*% as.matrix(K))
 	normed <- unnorm / rowSums(unnorm) * rowSums(N)
 	return(list(N = normed, K = K))
 }
+
+#' @export
+rbf_smoother <- function(data, tracts, sigma = c(1, 1, 10)){
+	mats <- make_matrices(data, tracts)
+	X <- mats$X
+	N <- mats$N
+	K <- kernel_matrix(X, sigma)
+	unnorm <- t(t(N) %*% as.matrix(K))
+	normed <- unnorm / rowSums(unnorm) * rowSums(N)
+	normed %>%
+		as.data.frame() %>%
+		rownames_to_column('tract') %>%
+		tbl_df() %>%
+		gather(key = group, value = n, -tract)
+}
+
+
 
 rbf_derivatives <- function(X,N, sigma = rep(1, dim(X)[2])){
 
