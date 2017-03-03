@@ -127,17 +127,18 @@ adj_with_geo_distance <- function(adj, tracts,...){
 #' @param sigma the multiplicative constant in the square exponential kernel.
 #' @return a tract-level tibble with a column D_alpha giving the derivatives of
 #' demographic frequencies with respect to spatial coordinates.
-compute_derivatives <- function(adj, sigma = 1, ...){
+compute_derivatives <- function(adj, r_sigma = 1, s_sigma = 1, smooth = F,...){
 
 	do_regression <- function(X, Y, W = diag(dim(X)[2])){
-
 		(solve((t(X) %*% W) %*% X) %*% t(X)) %*% (W %*% Y)
 	}
 
 	if('t_1' %in% names(adj)){
 		group_vars <- c('geoid_1', 't_1')
+		group_vars_renamed <- c('geoid', 't')
 	}else{
 		group_vars <- c('geoid_1')
+		group_vars_renamed <- c('geoid')
 	}
 
 	select_vars <- group_vars %>% append(c('geoid_2', 'regression_weight', 'X', 'Y'))
@@ -149,7 +150,7 @@ compute_derivatives <- function(adj, sigma = 1, ...){
 			   Y = map2(p_1, p_2, ~.x - .y))
 
 	out_df <- adj %>%
-		mutate(regression_weight = exp(- sigma * distance^2)) %>%
+		mutate(regression_weight = exp(- distance^2 / (2*r_sigma) )) %>%
 		select_(.dots = select_vars) %>%
 		group_by_(.dots = group_vars) %>%
 		filter(n() > 2) %>%
@@ -160,19 +161,36 @@ compute_derivatives <- function(adj, sigma = 1, ...){
 		mutate(W = map(W, ~ diag(., nrow = length(.)))) %>%
 		mutate(D_alpha = pmap(list(X, Y, W), do_regression))
 
-	P <- adj %>%
+	names(group_vars) <- group_vars
+	lookup_df <- adj %>%
+		select_(.dots = group_vars %>% append(c('p_1', 'n_1'))) %>%
+		distinct_(.dots = group_vars, .keep_all = TRUE) %>%
 		mutate(total = map_dbl(n_1, sum)) %>%
-		select(geoid_1, p_1, total) %>%
-		distinct(geoid_1, .keep_all = T)
-	out_df %>% left_join(P, by = c('geoid_1' = 'geoid_1'))
+		select(-n_1)
+	out_df <- out_df %>%
+		left_join(lookup_df, by = group_vars)
 
-
+	if(smooth){
+		smoother <- adj %>%
+			mutate(smoothing_weight = exp(- distance^2 / (2*s_sigma))) %>%
+			select_(.dots = group_vars %>% append(c('n_2', 'smoothing_weight'))) %>%
+			group_by_(.dots = group_vars) %>%
+			mutate(n_2 = map2(n_2, smoothing_weight, ~ .y * .x)) %>%
+			do(smoothed_n = reduce(.$n_2, `+`)) %>%
+			ungroup()
+		out_df <- out_df %>%
+			left_join(smoother, by = group_vars) %>%
+			mutate(p_1 = map(smoothed_n, ~ . / sum(.)))
+	}
+	if('t_1' %in% names(out_df)){
+		out_df <- out_df %>%
+			rename(t = t_1)
+	}
+	out_df %>%
+		rename(geoid = geoid_1, p = p_1) %>%
+		select_(.dots = group_vars_renamed %>% append(c('p', 'total', 'D_alpha')))
 }
-#
-#
-#
-#
-#
+
 #' Compute the hessian (or Riemannian metric) at each tract.
 #' @param tracts an spdf
 #' @param data a tibble containing demographic data
@@ -184,24 +202,20 @@ compute_derivatives <- function(adj, sigma = 1, ...){
 compute_hessian <- function(adj, hessian = DKL_){
 
 	select_vars <- c('geoid', 'total', 'g')
-	adj <- adj %>% rename(geoid = geoid_1)
 
-	if('t_1' %in% names(adj)){
-		 select_vars <- select_vars %>% append('t')
-		 adj <- adj %>% rename(t = t_1)
+	if('t' %in% names(adj)){
+		select_vars <- select_vars %>% append('t')
 	}
 
 	out <- adj %>%
-		mutate(H  = map(p_1,  hessian),
+		mutate(H  = map(p,  hessian),
 			   g = map2(D_alpha, H, ~ NA_multiply(t(.x), .y)))
-
 	out %>%
 		select_(.dots = select_vars)
 }
-
 #' Compute the metric df
 #' @export
-compute_metric <- function(tracts, data, km = T, sigma = 100, hessian = euc_){
+compute_metric <- function(tracts, data, km = T, r_sigma = 100, s_sigma = 1, smooth = F, hessian = euc_){
 	tracts <- spTransform(tracts, CRS("+proj=longlat +datum=WGS84"))
 
 	out <- tracts[tracts@data$GEOID %in% data$tract,] %>%
@@ -214,6 +228,7 @@ compute_metric <- function(tracts, data, km = T, sigma = 100, hessian = euc_){
 		add_data(data) %>%
 		adj_with_coords(tracts, km = km) %>%
 		adj_with_geo_distance(tracts) %>%
-		compute_derivatives(sigma = sigma) %>%
+		compute_derivatives(r_sigma = r_sigma, s_sigma = s_sigma, smooth = smooth) %>%
 		compute_hessian(hessian = hessian)
+	adj
 }
