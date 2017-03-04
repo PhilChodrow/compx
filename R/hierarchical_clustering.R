@@ -34,6 +34,7 @@ make_merge_list <- function(h, divergence, current_stage = 0){
 		select(from, to, from_stage, to_stage, div) %>%
 		mutate(pair = row_number()) %>%
 		gather(key = dir, value = name, -pair, -div, -from_stage, -to_stage) %>%
+		arrange(pair, name) %>%
 		distinct(name, .keep_all = T) %>%
 		group_by(pair) %>%
 		filter(n() == 2) %>%
