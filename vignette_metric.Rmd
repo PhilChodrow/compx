@@ -118,13 +118,14 @@ data  <- race_2010 %>%
 	filter(tract %in% tracts@data$GEOID) %>%
 	group_by(tract) %>%
 	ungroup() 
-	
+
 metric_df <- compute_metric(tracts, 
-							race_2010, 
+							data, 
 							km = T,
-							sigma = .1,
-							hessian = DKL_,
-							smooth = T)
+							r_sigma = 10,
+							s_sigma = 1, 
+							smooth = T,
+							hessian = euc_)
 
 ```
 
@@ -208,7 +209,8 @@ race_temporal <- detroit_race %>%
 metric_df <- compute_metric(tracts, 
 							race_temporal, 
 							km = T,
-							sigma = .1,
+							s_sigma = 1,
+							r_sigma = 1,
 							hessian = DKL_,
 							smooth = T)
 ```
@@ -224,7 +226,7 @@ metric_df %>% head()
 First, there's a `t` column for time. Second, the metric tensor is now `3 x 3`, which reflects the fact that we've added a third coordinate (time). 
 
 ```{r}
-metric_df$local_g[[1]]
+metric_df$g[[1]]
 ```
 
 In general, it's not a good idea to directly compare temporal components of the metric tensor to spatial ones, since they have different units. In this case, the spatial components have units of kilometers, but the temporal ones have units of years. However, it's not wrong to interpret this result as saying that, at this point in space and time, the demographic composition changes more when you move a km in space (especially north-south) than when you move a year in time. 
@@ -242,7 +244,10 @@ f_tracts %>%
 	geom_polygon() + 
 	scale_fill_viridis(option = 'magma', limits = c(NA, 1e1), trans = 'log10', oob = squish) + 
 	theme_map() + 
-	facet_wrap(~t)
+	facet_wrap(~t) + 
+	theme(legend.position = c(.9,0),
+		  legend.justification = c(0,0)) + 
+	guides(fill = guide_colorbar(title = expression(italic(j[x]))))
 ```
 
 The third component of the metric tensor quantifies the dependence on time. We can also extract that and visualize it: 
@@ -256,9 +261,12 @@ f_tracts %>%
 	ggplot() + 
 	aes(x = long, y = lat, fill = temporal, group = group) + 
 	geom_polygon() + 
-	scale_fill_viridis(option = 'magma', trans = 'log10', limits = c(NA, 1e0), oob = squish) + 
+	scale_fill_viridis(option = 'magma', trans = 'log10', limits = c(NA, 5e-2), oob = squish) + 
 	theme_map() + 
-	facet_wrap(~t)
+	facet_wrap(~t) + 
+	theme(legend.position = c(.9,0),
+		  legend.justification = c(0,0)) + 
+	guides(fill = guide_colorbar(title = expression(italic(j[t]))))
 ```
 
 We can see that, the predominantly white suburbs toward the west have generally experienced greater demographic change over time than the prodominantly black urban core toward the northeast. We also observe that the temporal component of the metric tensor tends to correlate with the spatial component of the previosu visualization. So, spatial transition areas also tend to be temporal transition areas. This makes sense if you think that the dynamics of population composition are continuous in space, so that change happens at the boundaries. However, this correlation is relatively weak. 
