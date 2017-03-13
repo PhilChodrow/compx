@@ -133,7 +133,7 @@ compute_derivatives <- function(adj, r_sigma = 1, s_sigma = 1, smooth = F,...){
 		tryCatch({
 			(solve((t(X) %*% W) %*% X) %*% t(X)) %*% (W %*% Y)
 			},
-			error = function(e) matrix(NA, dim(Y)[1], dim(X)[2]) )
+			error = function(e) matrix(NA, dim(X)[1], dim(Y)[2]) )
 	}
 
 	if('t_1' %in% names(adj)){
