@@ -130,7 +130,10 @@ adj_with_geo_distance <- function(adj, tracts,...){
 compute_derivatives <- function(adj, r_sigma = 1, s_sigma = 1, smooth = F,...){
 
 	do_regression <- function(X, Y, W = diag(dim(X)[2])){
-		(solve((t(X) %*% W) %*% X) %*% t(X)) %*% (W %*% Y)
+		tryCatch({
+			(solve((t(X) %*% W) %*% X) %*% t(X)) %*% (W %*% Y)
+			},
+			error = function(e) matrix(NA, dim(Y)[1], dim(X)[2]) )
 	}
 
 	if('t_1' %in% names(adj)){
