@@ -11,10 +11,25 @@ NULL
 #' @return a matrix containing the affinities computed with the quadratic exponential
 #' affinity kernel
 #' @export
-affinity_matrix <- function(g, sigma = 1){
+affinity_matrix <- function(g, sigma = 1, weight = FALSE){
 	dists <- distances(g, weights = E(g)$dist^2)
+
+
+
 	A <- exp(-dists * sigma)
 	A[is.na(A)] <- 0
+
+	if(weight){
+		V(g)$weight <- V(g)$n %>% map(sum)
+		weights     <- V(g)$weight %>% unlist() %>% diag()
+
+		row.names(weights) <- row.names(dists)
+		colnames(weights) <- colnames(dists)
+
+		weights     <- weights / max(weights)
+		A       <- (weights %*% A) %*% weights
+	}
+
 	A
 }
 
@@ -43,9 +58,9 @@ generalized_laplacian_matrix <- function(input, ...){
 #' Cluster a graph or affinity matrix.
 #' Output is a kmeans object giving the clusters.
 #' @export
-spectral_cluster <- function(g, sigma = 1, k = 2, nreps = 100){
+spectral_cluster <- function(g, sigma = 1, k = 2, nreps = 100, weight = FALSE){
 
-	A <- affinity_matrix(g, sigma = sigma)
+	A <- affinity_matrix(g, sigma = sigma, weight)
 
 	L   <- generalized_laplacian_matrix(A, sigma)
 	evL <- eigen(L, symmetric = T)
