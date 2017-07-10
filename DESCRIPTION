@@ -11,7 +11,9 @@ Imports:
     rgeos,
     data.table,
     rgdal,
-    sp
+    sp, 
+    units, 
+    sf
 License: CC0
 LazyData: true
 VignetteBuilder: knitr
