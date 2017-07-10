@@ -1,7 +1,7 @@
 #' constructors
 #' @name constructors
 #' @docType package
-#' @import tidyverse sp maptools rgeos igraph
+#' @import tidyverse sp maptools rgeos igraph units sf
 NULL
 
 #' Construct a lookup data frame from an SPDF object
@@ -11,27 +11,23 @@ NULL
 #' the second is the lookup identifier.
 #' @export
 id_lookup <- function(tracts, key_col = 'GEOID'){
-	data_frame(id = purrr::map_chr(tracts@polygons, ~.@ID),
-			   geoid = tracts@data[,key_col]) %>%
-		mutate(geoid = as.character(geoid))
+	tracts[[key_col]] %>%
+		data_frame(row = as.character(1:length(.)), geoid = .)
 }
 
 #' make a thing
 #' @param tracts the spdf
 #' @export
 make_adjacency <- function(tracts, ...){
-	ids <- id_lookup(tracts, ...)
-
-	rgeos::gRelate(tracts, byid = TRUE, pattern = '****1****') %>%
-		as.data.frame() %>%
-		rownames_to_column('id_1') %>%
-		tbl_df() %>%
-		gather(key = id_2, value = adj, -id_1) %>%
-		filter(adj) %>%
-		select(-adj) %>%
-		left_join(ids, by = c('id_1' = 'id')) %>%
-		left_join(ids, by = c('id_2' = 'id'), suffix = c('_1', '_2')) %>%
-		select(-id_1, -id_2)
+	lookup  <- id_lookup(tracts)
+	adj_mat <- st_relate(tracts, pattern = '****1****', sparse = TRUE) # as sparse list
+	1:length(adj_mat) %>%
+		map(~data_frame(from = as.character(.),
+						to = as.character(adj_mat[[.]]))) %>%
+		reduce(rbind) %>%
+		left_join(lookup, by = c('from' = 'row')) %>%
+		left_join(lookup, by = c('to' = 'row'), suffix = c('_1', '_2')) %>%
+		select(-from, -to)
 }
 
 # this is testable via simple counting
