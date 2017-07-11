@@ -181,14 +181,7 @@ add_n <- function(h, data_df){
 add_coordinates <- function(g, tracts, ...){
 	ids <- id_lookup(tracts, ...)
 
-	centroids <- rgeos::gCentroid(tracts,byid=TRUE)
-
-	coords <- centroids %>%
-		as.data.frame() %>%
-		rownames_to_column('id') %>%
-		tbl_df() %>%
-		left_join(ids, by = c('id' = 'id')) %>%
-		select(-id, x, y)
+	coords <- coords_df(tracts, km = FALSE)
 
 	if(is.null(V(g)$geoid)){
 		coords <- coords %>%
@@ -214,7 +207,8 @@ add_coordinates <- function(g, tracts, ...){
 #' The graph?
 #' @export
 construct_information_graph <- function(tracts, data_df, divergence){
-	adj <- tracts[tracts@data$GEOID %in% data_df$tract,] %>%
+	adj <- tracts %>%
+		filter(GEOID %in% data_df$tract) %>%
 		make_adjacency()
 
 	if('t' %in% names(data_df)){
