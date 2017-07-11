@@ -1,7 +1,7 @@
 #' tractwise geometry
 #' @name tractwise_geometry
 #' @docType package
-#' @import tidyverse sp maptools rgeos units sf 
+#' @import tidyverse sp maptools rgeos units sf
 NULL
 
 # #' Construct a tibble of geographic distances between pairs of tract centroids.
@@ -9,42 +9,42 @@ NULL
 # #' @param ... additional parameters passed to id_lookup
 # #' @return a tibble with three columns: two are tract names, and the third
 # #' is the geographic distance between them.
-distance_df <- function(tracts, ...){
-	ids <- id_lookup(tracts, ...)
-
-	centroids <- st_centroid(tracts) %>% 
-		mutate(x = map_dbl(geometry, ~.[1]),
-			   y = map_dbl(geometry, ~.[2])) %>% 
-		tbl_df() %>% 
-		select(GEOID, x, y)
-
-	centroids %>% 
-		select(x, y) %>% 
-		as.matrix() %>% 
-		dist() %>% 
-		as.matrix() %>% 
-		as.data.frame() %>%
-		rownames_to_column('id_1') %>%
-		tbl_df() %>%
-		gather(key = id_2, value = distance, -id_1) %>%
-		left_join(ids, by = c('id_1' = 'row')) %>%
-		left_join(ids, by = c('id_2' = 'row'), suffix = c('_1', '_2')) %>%
-		select(geoid_1, geoid_2, distance)
-}
+# distance_df <- function(tracts, ...){
+# 	ids <- id_lookup(tracts, ...)
+#
+# 	centroids <- st_centroid(tracts) %>%
+# 		mutate(x = map_dbl(geometry, ~.[1]),
+# 			   y = map_dbl(geometry, ~.[2])) %>%
+# 		tbl_df() %>%
+# 		select(GEOID, x, y)
+#
+# 	centroids %>%
+# 		select(x, y) %>%
+# 		as.matrix() %>%
+# 		dist() %>%
+# 		as.matrix() %>%
+# 		as.data.frame() %>%
+# 		rownames_to_column('id_1') %>%
+# 		tbl_df() %>%
+# 		gather(key = id_2, value = distance, -id_1) %>%
+# 		left_join(ids, by = c('id_1' = 'row')) %>%
+# 		left_join(ids, by = c('id_2' = 'row'), suffix = c('_1', '_2')) %>%
+# 		select(geoid_1, geoid_2, distance)
+# }
 #
 #' Construct a tibble of centroid coordinates
 #' @param tracts the spdf whose coordinates we wish to compute.
 #' @param ... additional parameters passed to id_lookup
 #' @export
 coords_df <- function(tracts, km = FALSE, ...){
-	
-	centroids <- st_centroid(tracts) %>% 
+
+	centroids <- st_centroid(tracts) %>%
 		mutate(x = map_dbl(geometry, ~.[1]),
-			   y = map_dbl(geometry, ~.[2])) %>% 
-		tbl_df() %>% 
-		select(GEOID, x, y) %>% 
+			   y = map_dbl(geometry, ~.[2])) %>%
+		tbl_df() %>%
+		select(GEOID, x, y) %>%
 		rename(geoid = GEOID)
-	
+
 	if(km){
 		centroids <- centroids %>%
 			mutate(x = x * cos(y / 360) * 111,
@@ -60,10 +60,10 @@ coords_df <- function(tracts, km = FALSE, ...){
 # #' other if they are geographically adjacent.
 # #' @export
 adjacency_df <- function(tracts, ...){
-	
+
 	dists <- distance_df(tracts, ...)
 
-	make_adjacency(tracts) %>% 
+	make_adjacency(tracts) %>%
 		left_join(dists, by = c('geoid_1' = 'geoid_1', 'geoid_2' = 'geoid_2'))
 }
 
@@ -192,11 +192,9 @@ compute_hessian <- function(adj, hessian = DKL_){
 #' Compute the metric df
 #' @export
 compute_metric <- function(tracts, data, km = T, r_sigma = 100, s_sigma = 1, smooth = F, hessian = euc_){
-	
-	dist_df <- distance_df(tracts)
-	
-	out <- tracts %>% 
-		filter(GEOID %in% data$tract) %>% 
+
+	out <- tracts %>%
+		filter(GEOID %in% data$tract) %>%
 		make_adjacency()
 
 	if('t' %in% names(data)){
@@ -205,7 +203,7 @@ compute_metric <- function(tracts, data, km = T, r_sigma = 100, s_sigma = 1, smo
 	adj <- out %>%
 		add_data(data) %>%
 		adj_with_coords(tracts, km = km) %>%
-		left_join(dist_df, by = c('geoid_1' = 'geoid_1', 'geoid_2' = 'geoid_2')) %>% 
+		mutate(distance = sqrt((x_1 - x_2)^2 + (y_1 - y_2)^2)) %>%
 		compute_derivatives(r_sigma = r_sigma, s_sigma = s_sigma, smooth = smooth) %>%
 		compute_hessian(hessian = hessian)
 	adj

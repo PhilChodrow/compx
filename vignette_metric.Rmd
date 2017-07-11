@@ -91,9 +91,6 @@ tracts_to_use <- detroit_race %>%
 
 tracts <- detroit_tracts %>% 
 	filter(GEOID %in% tracts_to_use$tract)
-
-f_tracts <- tracts %>%         # for plotting later
-	fortify(region = 'GEOID')
 ```
 
 # The Information Manifold
