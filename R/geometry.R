@@ -1,177 +1,180 @@
-#' geometry
+#' tractwise geometry
 #' @name geometry
 #' @docType package
-#' @import tidyverse sp maptools
+#' @import tidyverse sp maptools rgeos units sf
 NULL
 
-#' Compute numerical first derivatives on a grid_data data frame with a
-#' user-specified difference method.
-#' @param grid_data, a data frame giving counts on a grid.
-#' @param difference_method, one of c('central', 'forward', 'backward')
-#' @return grid_data with new columns for derivatives, one for each grid
-#' coordinate
+#' Construct a tibble of centroid coordinates from an sf data.frame containing polygons in its geometry column.
+#' @param tracts the sf data.frame whose coordinates we wish to compute.
+#' @param km boolean should the centroids be converted so that the euclidean distances between them are approximately measurable in km?
 #' @export
-compute_derivs <- function(grid_data, difference_methods = NULL){
+coords_df <- function(tracts, km = FALSE, ...){
 
-	core_names <- c('x', 'y', 'coord_key', 'group', 'n')
-	nonspatial_names <- names(grid_data) %>% setdiff(core_names) %>% setdiff('cell')
-	coord_names <- c('x', 'y') %>% append(nonspatial_names)
+	centroids <- st_centroid(tracts) %>%
+		mutate(x = map_dbl(geometry, ~.[1]),
+			   y = map_dbl(geometry, ~.[2])) %>%
+		tbl_df() %>%
+		select(GEOID, x, y) %>%
+		rename(geoid = GEOID)
 
-
-	diff_methods <- list()
-	for(coord in coord_names){
-		diff_methods[coord] = 'central'
+	if(km){
+		centroids <- centroids %>%
+			mutate(x = x * cos(y / 360) * 111,
+				   y = y * 111)
 	}
-
-	if(!is.null(difference_methods)){
-		diff_methods <- diff_methods %>% modifyList(difference_methods)
-	}
-
-	arranged <- grid_data %>%
-		arrange_(.dots = nonspatial_names %>% append(c('x', 'y', 'group'))) %>%
-		group_by_(.dots = nonspatial_names %>% append('coord_key')) %>%
-		mutate(total = sum(n),
-			   p = n / total)
-
-	methods <- list(
-		central  = ~((lead(p) - lag(p)) / (lead(coord) - lag(coord))),
-		forward  = ~((lead(p) - p) / (lead(coord) - coord)),
-		backward = ~((p - lag(p)) / (coord - lag(coord)))
-		)
-
-	for(coord in coord_names){
-		group_coords <- coord_names %>% setdiff(coord) %>% append('group')
-
-		varname <- paste0('dp_d', coord)
-		varval  <- lazyeval::interp(methods[[diff_methods[[coord]]]],
-									coord = as.name(coord))
-
-		arranged <- arranged %>%
-			group_by_(.dots = group_coords) %>%
-			mutate_(.dots = setNames(list(varval), varname))
-	}
-	arranged %>% ungroup()
+	return(centroids)
 }
 
-#' Construct an adjacency data frame for a grid_data data frame.
+#' Construct a (nested) tibble with tract-level demographics and coordinates
+#' @param tracts the sf data.frame supplying geographic information
+#' @param data the tibble containing the demographics for the tracts.
+#' @param km boolean should the centroids be converted so that the euclidean distances between them are approximately measurable in km?
+#' @return a nested tibble containing tract-level demographics and coordinates
+#' as vectors in list-columns.
+
+adj_with_coords <- function(adj, tracts, km = FALSE){
+
+	coords <- coords_df(tracts, km)
+
+	adj <- adj %>%
+		left_join(coords, by = c('geoid_1' = 'geoid')) %>%
+		left_join(coords, by = c('geoid_2' = 'geoid'), suffix = c('_1', '_2'))
+
+	if('t_1' %in% names(adj)){
+		adj <- adj %>%
+			mutate(coords_1 = pmap(list(x_1, y_1, t_1), c),
+				   coords_2 = pmap(list(x_2, y_2, t_2), c))
+	}else{
+		adj <- adj %>%
+			mutate(coords_1 = pmap(list(x_1, y_1), c),
+				   coords_2 = pmap(list(x_2, y_2), c))
+	}
+	return(adj)
+}
+
+#' Compute numerical derivatives from data using weighted linear regression
+#' on each tract's 1-ego network.
+#' @param adj the adjacency matrix on which to compute. Must include centroids.
+#' @param r_sigma geographic bandwidth of the regression weight decay
+#' @param s_sigma if smooth = TRUE, the bandwidth of a geographic rbf smoother
+#' @param smooth boolean should the derivatives be computed on a geographically smoothed demographic distribution?
+#' @return a tract-level tibble with a column D_alpha giving the derivatives of
+#' demographic frequencies with respect to spatial coordinates.
+compute_derivatives <- function(adj, r_sigma = 1, s_sigma = 1, smooth = F){
+
+	do_regression <- function(X, Y, W = diag(dim(X)[2])){
+		tryCatch({
+			(solve((t(X) %*% W) %*% X) %*% t(X)) %*% (W %*% Y)
+			},
+			error = function(e) matrix(NA, dim(X)[1], dim(Y)[2]) )
+	}
+
+	if('t_1' %in% names(adj)){
+		group_vars <- c('geoid_1', 't_1')
+		group_vars_renamed <- c('geoid', 't')
+	}else{
+		group_vars <- c('geoid_1')
+		group_vars_renamed <- c('geoid')
+	}
+
+	select_vars <- group_vars %>% append(c('geoid_2', 'regression_weight', 'X', 'Y'))
+
+	adj <- adj %>%
+		mutate(X = map2(coords_2, coords_1, ~ .x - .y),
+			   p_1 = map(n_1, simplex_normalize),
+			   p_2 = map(n_2, simplex_normalize),
+			   Y = map2(p_1, p_2, ~.x - .y))
+
+	out_df <- adj %>%
+		mutate(regression_weight = exp(- distance^2 / (2*r_sigma) )) %>%
+		select_(.dots = select_vars) %>%
+		group_by_(.dots = group_vars) %>%
+		filter(n() > 2) %>%
+		do(X = reduce(.$X, rbind),
+		   Y = reduce(.$Y, rbind),
+		   W = reduce(.$regression_weight, .Primitive('c'))) %>%
+		ungroup() %>%
+		mutate(W = map(W, ~ diag(., nrow = length(.)))) %>%
+		mutate(D_alpha = pmap(list(X, Y, W), do_regression))
+
+	names(group_vars) <- group_vars
+	lookup_df <- adj %>%
+		select_(.dots = group_vars %>% append(c('p_1', 'n_1'))) %>%
+		distinct_(.dots = group_vars, .keep_all = TRUE) %>%
+		mutate(total = map_dbl(n_1, sum)) %>%
+		select(-n_1)
+	out_df <- out_df %>%
+		left_join(lookup_df, by = group_vars)
+
+	if(smooth){
+		smoother <- adj %>%
+			mutate(smoothing_weight = exp(- distance^2 / (2*s_sigma))) %>%
+			select_(.dots = group_vars %>% append(c('n_2', 'smoothing_weight'))) %>%
+			group_by_(.dots = group_vars) %>%
+			mutate(n_2 = map2(n_2, smoothing_weight, ~ .y * .x)) %>%
+			do(smoothed_n = reduce(.$n_2, `+`)) %>%
+			ungroup()
+		out_df <- out_df %>%
+			left_join(smoother, by = group_vars) %>%
+			mutate(p_1 = map(smoothed_n, ~ . / sum(.)))
+	}
+	if('t_1' %in% names(out_df)){
+		out_df <- out_df %>%
+			rename(t = t_1)
+	}
+	out_df %>%
+		rename(geoid = geoid_1, p = p_1) %>%
+		select_(.dots = group_vars_renamed %>% append(c('p', 'total', 'D_alpha')))
+}
+
+#' Compute the hessian (or Riemannian metric) at each tract.
+#' @param adj an adjacency tibble in which derivatives have already been computed
+#' @param hessian one of `c(DKL_, euc_, cum_euc_)`
+#' @return a tibble with a column local_H containing the Hessian
+#' (or Riemannian metric) in local coordinates.
+compute_hessian <- function(adj, hessian = DKL_){
+
+	select_vars <- c('geoid', 'total', 'g')
+
+	if('t' %in% names(adj)){
+		select_vars <- select_vars %>% append('t')
+	}
+
+	out <- adj %>%
+		mutate(H  = map(p,  hessian),
+			   g = map2(D_alpha, H, ~ NA_multiply(t(.x), .y)))
+	out %>%
+		select_(.dots = select_vars)
+}
+
+#' Compute the pullback metric tensor from an sf data frame and an accompanying set of
+#' demographic data.
 #'
-#' @param grid_data a grid_data data frame
-#' @return a data frame giving the adjacencies between grid cells, suitable for
-#' use as an edge-list to construct an igraph graph.
-
-# make_adjacency <- function(grid_data, coords){
-#
-# 	adj <- grid_data[,coords %>% append('coord_key')] %>%
-# 		arrange_(.dots = coords) %>%
-# 		unique()
-#
-# 	for(coord in coords){
-# 		group_coords <- coords %>%
-# 			setdiff(coord)
-#
-# 		varname <- list(paste0('forward_', coord), paste0('backward_', coord))
-# 		forward  <- lazyeval::interp(~lead(coord_key))
-# 		backward <- lazyeval::interp(~lag(coord_key))
-# 		varval <- list(forward, backward)
-#
-# 		adj <- adj %>%
-# 			group_by_(.dots = group_coords) %>%
-# 			mutate_(.dots = setNames(varval, varname)) %>%
-# 			ungroup()
-# 	}
-# 	gather_cols <-names(adj)[grepl(pattern = 'ward', names(adj))]
-# 	gather_cols <- gather_cols %>% append('self')
-# 	adj %>%
-# 		mutate(self = coord_key) %>%
-# 		gather_(key_col = 'direction', value_col = 'neighbor', gather_cols = gather_cols)
-# }
-
-#' Smooth a grid_data data frame by constructing a new column of proportions
-#' computed on the sum of a cell and each of its neighbors.
-#' @param grid_data the grid_data data frame to smooth.
-#' @return a new grid_data object with smoothed proportions
+#' @param tracts the sf data.frame supplying geographic information
+#' @param data the tibble supplying demographic data
+#' @param km whether to compute rectangular distances in km
+#' @param r_sigma regression smoother for derivative computation
+#' @param s_sigma geographic smoother for derivative computation
+#' @param smooth boolean should a geographic smoother be used for derivatives?
+#' @param hessian the hessian function to be used, one of c(DKL_, euc_, cum_euc_)
+#'
+#' @return a tibble in which each row has a list-column containing the pullback metric tensor stored as a matrix.
 #' @export
-adjacency_smoother <- function(grid_data, coords){
 
-	adj <- make_adjacency(grid_data, coords)
-	adj %>%
-		select(coord_key, neighbor) %>%
-		left_join(grid_data, by = c('coord_key' = 'coord_key')) %>%
-		group_by(coord_key, group) %>%
-		summarise(smoothed_n = sum(n)) %>%
-		group_by(coord_key) %>%
-		mutate(smoothed_p = smoothed_n / sum(smoothed_n))
-}
+compute_metric <- function(tracts, data, km = T, r_sigma = 100, s_sigma = 1, smooth = F, hessian = euc_){
 
-#' Compute the Riemannian metric in local coordinates on a grid_data object
-#' @param grid_data a grid_data object
-#' @param divergence the divergence function chosen to induce a metric in
-#' information space. One of c('KL', 'euc', 'cum_euc').
-#' @param coord_names the names of the coordinate columns in grid_data
-#' @return a new grid_data object with hessians (Riemannian metrics) computed
-#' in local coordinates
+	out <- tracts %>%
+		filter(GEOID %in% data$tract) %>%
+		make_adjacency()
 
-compute_metric <- function(grid_data, divergence, coord_names){
-
-	cum_euc <- function(p){
-		lower <- matrix(0, length(p), length(p))
-		lower[lower.tri(lower, diag = T)] <- 1
-		lower %*% t(lower)
+	if('t' %in% names(data)){
+		out <- out %>% add_temporal(unique(data$t))
 	}
-
-	hessians <- list(KL      = function(p) return(diag(1/p)),
-					 euc     = function(p) diag(length(p)),
-					 cum_euc = cum_euc)
-
-	NA_multiply <- function(D_alpha, H){
-		na_locs           <- is.na(t(D_alpha) %*% D_alpha)
-		H[is.infinite(H)] <- 0
-		result            <- t(D_alpha) %*% H %*% D_alpha
-		result[na_locs]   <- NA
-		result
-	}
-
-	deriv_names <- paste0('dp_d', coord_names)
-	no_nest <- coord_names %>% append(c('cell', 'coord_key', 'total'))
-	to_nest <- names(grid_data) %>% setdiff(no_nest)
-
-	grid_data %>%
-		nest_(key_col = 'data', nest_cols = to_nest) %>%
-		mutate(D_alpha = map(data,        ~ as.matrix(.[deriv_names])),
-			   H       = map(data,        ~ hessians[[divergence]](.$smoothed_p)),
-			   local_H = map2(D_alpha, H, ~ NA_multiply(.x, .y)))
+	adj <- out %>%
+		add_data(data) %>%
+		adj_with_coords(tracts, km = km) %>%
+		mutate(distance = sqrt((x_1 - x_2)^2 + (y_1 - y_2)^2)) %>%
+		compute_derivatives(r_sigma = r_sigma, s_sigma = s_sigma, smooth = smooth) %>%
+		compute_hessian(hessian = hessian)
+	adj
 }
-
-#' Compute local Riemannian metrics from tracts and a demographics data frame.
-#' The user may specify the grid resolution, the type of divergence used, and
-#' the numerical difference method employed
-#' @param tracts an SPDF
-#' @param data a data frame consisting at least three columns:
-#' - tract, the key relating the data frame to the tracts SPDF
-#' - group, the group labels
-#' - n a count for each group label in each tract
-#' - (Optional) additional nonspatial coordinates, such as a time coordinate
-#' @param resolution the spatial resolution of the grid on which to compute, in
-#' km.
-#' @param divergence one of c('KL', 'euc', 'cum_euc') specifying the divergence
-#' used to compare distributions
-#' @param difference_method one of c('central', 'forward', 'backward'),
-#' specifying the computation of numerical first derivatives
-#' @return grid_data data frame with the the Riemannian metric tensor in local
-#' coordinates for each grid cell.
-#' @export
-compute_geometry <- function(tracts, data, resolution, divergence = 'KL', difference_methods = NULL){
-
-	coord_names <- names(data) %>%
-		setdiff(c('group', 'n', 'tract'))
-	coord_names <- c('x', 'y') %>% append(coord_names)
-
-	grid_info <- grid_aggregate(tracts,resolution, data)
-	smoothed  <- grid_info$grid_data %>% adjacency_smoother(coord_names)
-	grid_data <- grid_info$grid_data %>%
-		compute_derivs(difference_methods) %>%
-		left_join(smoothed) %>%
-		compute_metric(divergence, coord_names)
-	grid_data
-}
-

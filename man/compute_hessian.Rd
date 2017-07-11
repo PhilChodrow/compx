@@ -4,7 +4,7 @@
 \alias{compute_hessian}
 \title{Compute the hessian (or Riemannian metric) at each tract.}
 \usage{
-compute_hessian(adj, hessian = DKL_, smooth = F)
+compute_hessian(adj, hessian = DKL_)
 }
 \arguments{
 \item{tracts}{an spdf}

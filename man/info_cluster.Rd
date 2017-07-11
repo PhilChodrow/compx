@@ -10,12 +10,12 @@ info_cluster(g, divergence)
 \arguments{
 \item{g}{the graph to cluster}
 
-\item{divergence}{the divergence function to use for clustering. 
+\item{divergence}{the divergence function to use for clustering.
 Must take as an argument a pair of node attributes n.}
 }
 \value{
 an object of class `hclust` summarising the clustering, including
-cluster labels and the cluster heights. Suitable for use with `cutree` and 
+cluster labels and the cluster heights. Suitable for use with `cutree` and
 all other methods used with `hclust` objects, although `plot` is a bit janky
 because we haven't implemented ordering.
 }

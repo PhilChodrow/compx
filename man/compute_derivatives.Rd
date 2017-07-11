@@ -5,14 +5,14 @@
 \title{Compute numerical derivatives from data using weighted linear regression
 on each tract's 1-ego network.}
 \usage{
-compute_derivatives(adj, sigma = 1, ...)
+compute_derivatives(adj, r_sigma = 1, s_sigma = 1, smooth = F, ...)
 }
 \arguments{
-\item{sigma}{the multiplicative constant in the square exponential kernel.}
-
 \item{tracts, }{the spdf}
 
 \item{data, }{a tibble containing the demographic data}
+
+\item{sigma}{the multiplicative constant in the square exponential kernel.}
 }
 \value{
 a tract-level tibble with a column D_alpha giving the derivatives of

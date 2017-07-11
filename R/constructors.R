@@ -15,10 +15,12 @@ id_lookup <- function(tracts, key_col = 'GEOID'){
 		data_frame(row = as.character(1:length(.)), geoid = .)
 }
 
-#' make a thing
-#' @param tracts the spdf
+#'
+#' @param tracts an sf data.frame in which the `geometry` column holds polygons
+#' @return df a two-column tibble in which two ids appear in the same row iff
+#' their corresponding polygons are related according to the '****1****' DE9-IM pattern. Learn more about these patterns at the [wikipedia page](https://en.wikipedia.org/wiki/DE-9IM).
 #' @export
-make_adjacency <- function(tracts, ...){
+make_adjacency <- function(tracts){
 	lookup  <- id_lookup(tracts)
 	adj_mat <- st_relate(tracts, pattern = '****1****', sparse = TRUE) # as sparse list
 	1:length(adj_mat) %>%
@@ -30,7 +32,9 @@ make_adjacency <- function(tracts, ...){
 		select(-from, -to)
 }
 
-# this is testable via simple counting
+#' Add temporal data to a nontemporal adjacency df
+#' @param adj the nontemporal df to which we add a temporal column
+#' @param t_vec a list of the timestamps to add.
 #' @export
 add_temporal <- function(adj, t_vec = NULL){
 
@@ -58,7 +62,7 @@ add_temporal <- function(adj, t_vec = NULL){
 
 }
 
-#' @export
+
 undirect <- function(adj, allow_self_loops = FALSE){
 
 	# construct spatial keys
@@ -92,7 +96,7 @@ undirect <- function(adj, allow_self_loops = FALSE){
 	out %>% select(-key)
 }
 
-#' @export
+
 add_data <- function(adj, data){
 
 	all_ids <- c(adj$geoid_1, adj$geoid_2) %>% unique()
@@ -129,7 +133,7 @@ information_distances <- function(adj, divergence){
 			   dist = ifelse(is.na(dist), Inf, dist)) # bit of a hack
 }
 
-#' @export
+
 make_graph <- function(adj){
 
 	if('t_1' %in% names(adj)){
@@ -177,7 +181,7 @@ add_n <- function(h, data_df){
 }
 
 
-#' @export
+
 add_coordinates <- function(g, tracts, ...){
 	ids <- id_lookup(tracts, ...)
 
@@ -204,8 +208,12 @@ add_coordinates <- function(g, tracts, ...){
 	}
 }
 
-#' The graph?
+#' Construct an igraph graph object from the centroids of tracts stored as an sf data.frame, where tracts are linked iff adjacent.
+#' @param tracts an sf data.frame storing polygons in the geometry column
+#' @param data_df a tibble containing demographic data
+#' @param divergence the divergence function with which to compare demographic distributions, one of c(DKL, euc, cum_euc).
 #' @export
+
 construct_information_graph <- function(tracts, data_df, divergence){
 	adj <- tracts %>%
 		filter(GEOID %in% data_df$tract) %>%

@@ -3,14 +3,12 @@
 \name{information_distances}
 \alias{information_distances}
 \title{We are assuming a divergence function, defined by the user,
-that takes in n_1 and n_2 and returns a number. No square rooting
-should be necessary; this should be handled in the function itself.}
+that takes in n_1 and n_2 and returns a number.}
 \usage{
 information_distances(adj, divergence)
 }
 \description{
 We are assuming a divergence function, defined by the user,
-that takes in n_1 and n_2 and returns a number. No square rooting
-should be necessary; this should be handled in the function itself.
+that takes in n_1 and n_2 and returns a number.
 }
 

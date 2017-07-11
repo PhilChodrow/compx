@@ -5,9 +5,7 @@
 *.synctex.gz
 *.fdb_latexmk
 *.csv
-*.html
 *.aux
 *.Rproj
 *.Rbuildignore
-
 .Rproj.user

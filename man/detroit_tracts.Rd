@@ -4,7 +4,7 @@
 \name{detroit_tracts}
 \alias{detroit_tracts}
 \title{Tract shapefiles for Wayne County, containing the city of Detroit}
-\format{An object of class \code{SpatialPolygonsDataFrame} with 611 rows and 12 columns.}
+\format{An object of class \code{sf} (inherits from \code{data.frame}) with 611 rows and 13 columns.}
 \source{
 \url{https://www.census.gov/}, downloaded with \url{https://cran.r-project.org/web/packages/tigris/index.html}.
 }

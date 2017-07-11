@@ -5,8 +5,8 @@
 NULL
 
 #' Find the Kullback-Leibler divergence of two empirical distributions.
-#' @param p the 'true' distribution
-#' @param q the estimated distribution
+#' @param n the 'true' distribution
+#' @param m the estimated distribution
 #' @return numeric the divergence between p and q
 #' @export
 
@@ -18,7 +18,11 @@ DKL <- function(n,m){
 	p <- simplex_normalize(n)
 	q <- simplex_normalize(m)
 
-	return(sum(p * log(p/q), na.rm = T))
+	out <- sum(p * log(p/q), na.rm = T)
+	if(is.na(out)){
+		out <- Inf
+	}
+	return(out)
 }
 
 #' @inherit DKL
