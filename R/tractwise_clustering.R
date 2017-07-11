@@ -1,7 +1,7 @@
 #' tractwise_clustering
 #' @name tractwise_clustering
 #' @docType package
-#' @import tidyverse sp maptools rgeos
+#' @import tidyverse sp maptools rgeos RSpectra
 NULL
 
 #' Construct an affinity matrix for a graph g based on the dist edge attribute
@@ -11,25 +11,22 @@ NULL
 #' @return a matrix containing the affinities computed with the quadratic exponential
 #' affinity kernel
 #' @export
-affinity_matrix <- function(g, sigma = 1, weight = FALSE){
-	dists <- distances(g, weights = E(g)$dist^2)
+affinity_matrix <- function(g, sigma = 1){
 
+	adj <- as_adj(g)
 
+	# if(sparse){
+	dists <- as_adj(g, attr = 'dist')
+	# }else{
+	# 	dists <- distances(g, weights = E(g))
+	# }
 
-	A <- exp(-dists * sigma)
-	A[is.na(A)] <- 0
-
-	if(weight){
-		V(g)$weight <- V(g)$n %>% map(sum)
-		weights     <- V(g)$weight %>% unlist() %>% diag()
-
-		row.names(weights) <- row.names(dists)
-		colnames(weights) <- colnames(dists)
-
-		weights     <- weights / max(weights)
-		A       <- (weights %*% A) %*% weights
-	}
-
+	# if(sparse){
+	A <- exp(-dists^2 * sigma) * adj
+	# }else{
+	# 	A <- exp(-dists^2 * sigma)
+	# 	A[is.na(A)] <- 0
+	# }
 	A
 }
 
@@ -43,27 +40,20 @@ affinity_matrix <- function(g, sigma = 1, weight = FALSE){
 #' @details This function involves a matrix inversion and is therefore fairly
 #' expensive for large graphs.
 #' @export
-generalized_laplacian_matrix <- function(input, ...){
-	assertthat::assert_that(class(input) %in% c('matrix', 'igraph'))
-	if(class(input) == 'igraph'){
-		A <- affinity_matrix(input, ...)
-	}else{
-		A <- input
-	}
-
-	D <- diag(rowSums(A))
+normalized_laplacian <- function(A){
+	v <- A %*% rep(1, dim(A)[1]) %>% as.numeric()
+	D <- diag(v)
 	L <- solve(D) %*% (D - A)
 }
 
 #' Cluster a graph or affinity matrix.
-#' Output is a kmeans object giving the clusters.
+#' Output is a copy of the graph with vertex attributes giving the cluster labels.
 #' @export
-spectral_cluster <- function(g, sigma = 1, k = 2, nreps = 100, weight = FALSE){
+spectral_cluster <- function(g, sigma = 1, k = 2, nreps = 100){
 
-	A <- affinity_matrix(g, sigma = sigma, weight)
-
-	L   <- generalized_laplacian_matrix(A, sigma)
-	evL <- eigen(L, symmetric = T)
+	A <- affinity_matrix(g, sigma = sigma)
+	L   <- normalized_laplacian(A)
+	evL <- eigs(L, k, which = 'LM', sigma = 1e-10)
 	Z <- evL$vectors[,(ncol(evL$vectors)-k+1):ncol(evL$vectors)]
 
 	models <- data_frame(n = 1:nreps) %>%

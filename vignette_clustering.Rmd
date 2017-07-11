@@ -31,6 +31,11 @@ library(tidyverse)    # for data manipulation and viz
 library(maptools)     # required by ggplot2::fortify
 library(igraph)       # for network analysis
 library(RColorBrewer) # for plots
+library(ggthemes)     # for theme_map
+library(units)        # needed (can we pull this into the package?)
+library(sf)           # needed (can we pull this into the package?)
+library(scales)
+library(RSpectra)     # fast eigenvalues
 ```
 
 
@@ -47,17 +52,15 @@ Three columns are required:
 
 Additionally, you may include an optional column for time `t`. `compx` functions will automatically use this column of detected; if you don't want to do temporal analysis, you should delete the $t$ column if you have one. Any additional columns are ignored.  
 
-We now prepare the data we''l use: 
+We now prepare the data we'll use: 
 ```{r}
 tracts_to_use <- detroit_race %>% 
 	group_by(tract, t) %>%
 	summarise(n = sum(n)) %>%
 	filter(n > 100) 
 
-tracts <- detroit_tracts[detroit_tracts@data$GEOID %in% tracts_to_use$tract, ]
-
-f_tracts <- tracts %>%         # for plotting later
-	fortify(region = 'GEOID')
+tracts <- detroit_tracts %>% 
+	filter(GEOID %in% tracts_to_use$tract)
 
 race_2010 <- detroit_race %>%
 	filter(t == 2010) %>%
@@ -86,18 +89,18 @@ Having defined an appropriate divergence, we can now construct the graph:
 g <- construct_information_graph(tracts = tracts, 
 								 data = race_2010, 
 								 divergence = js_dist)
-
 g
 ```
 
 `g` is an `igraph` object with edge and node attributes. The `dist` edge attribute reflects how information-geometrically dissimilar are the connected nodes, where this dissimilarity is just the information distance between the nodes, calculated using the metric tensor. It's useful to visualize this network. In the plot below, dissimilar tracts have thin edges between them, while very similar ones are joined by thick edges. 
+
 ```{r, fig.height = 4}
 
 edges <- g %>% as_long_data_frame() %>% tbl_df()
 nodes <- data_frame(x = V(g)$x, y = V(g)$y)
 
 ggplot() + 
-    geom_polygon(aes(x = long, y = lat, group = group), fill = 'firebrick', alpha = .6, data = f_tracts) +
+	geom_sf(aes(), fill = 'firebrick', data = tracts, alpha = .6, size = 0) + 
     geom_segment(aes(x = from_x, 
     				 y = from_y, 
     				 xend = to_x, 
@@ -114,18 +117,18 @@ Comparing to the figures above, you might notice that areas with thin or invisib
 
 We're interested in determining the "scale" of segregation -- the characteristic spatial resolution or resolutions at which racial differences are most pronounced. There are lots of good ways to try to get at this quantitatively, but one way is inspired by a contemporary machine-learning algorithm called **spectral clustering**, which you can read more about [here](http://www.cs.cmu.edu/~aarti/Class/10701/readings/Luxburg06_TR.pdf). The idea is to compute the Laplacian matrix corresponding to the graph `g`, and then compute its spectrum of eigenvalues. "Gaps" in the eigenvalue spectrum will correspond to strong "signals" about the spatial scale of separation. Intiutively, it "makes sense" to cut the structure into that many pieces. 
 ```{r, fig.height = 4}
-A   <- affinity_matrix(g, sigma = 20)        # square exponential affinity with specified sigma
-L   <- generalized_laplacian_matrix(A)      # L_{rw} in the tutorial cited above
-evL <- eigen(L, symmetric = T)              # compute the spectrum
+A   <- affinity_matrix(g, sigma = 50)        # square exponential affinity with specified sigma
+L   <- normalized_laplacian(A)      # L_{rw} in the tutorial cited above
+evL <- eigs(L, 50, which = 'LM', sigma = 1e-10)             # compute the spectrum
 
-data.frame(n = 1:30, ev = 1 - rev(evL$values)[1:30]) %>%
+data.frame(n = 1:30, ev = 1 - rev(Re(evL$values))[1:30]) %>%
 	ggplot() +
 	aes(x = n, y = ev) +
 	geom_line() +
 	geom_point() +
 	scale_y_continuous(trans = 'log10') + 
-	geom_vline(xintercept  = 3.5, linetype = 'dashed') + 
-	geom_vline(xintercept  = 8.5, linetype = 'dashed') + 
+	geom_vline(xintercept  = 7.5, linetype = 'dashed') + 
+	geom_vline(xintercept  = 9.5, linetype = 'dashed') + 
 	geom_vline(xintercept = 10.5, linetype = 'dashed') + 
 	theme_bw()
 ```
@@ -142,7 +145,7 @@ The nice thing about taking inspiration from spectral clustering is that this me
 
 set.seed(1234) # for reproducibility
 
-k <- 8         # number of clusters, determined from previous graph
+k <- 7         # number of clusters, determined from previous graph
 nreps <- 1000  # number of repetitions
 
 # Extract the eigenspace of L corresponding to the first k components
@@ -167,7 +170,7 @@ g        <- g %>% set_vertex_attr(name = 'cluster',
 We've also provided a convenience function that will do the same thing; it's just a wrapper around the code above.  
 
 ```{r, eval = FALSE}
-g <- g %>% spectral_cluster(sigma = 20, k = k, nreps = nreps)
+g <- g %>% spectral_cluster(sigma = 50, k = k, nreps = nreps)
 ```
 
 Either way, now we can plot the result: 
@@ -261,8 +264,9 @@ When  `t` column is provided, the names of `g` are concatenations of the GEOID o
 We can use our same spectral clustering and agglomerative clustering techniques here as well. Let's do spectral first. Since the network we are clustering is more complex, we'll allow some more clusters. Note that this 
 
 ```{r}
-k     <- 15
-sigma <- 20
+k     <- 9
+sigma <- 50
+
 g     <- g %>% spectral_cluster(sigma = sigma, k = k, nreps = 1000)
 ```
 
@@ -301,9 +305,9 @@ ggplot() +
 	scale_color_manual(values = pal(k)) 
 ```
 
-Compared to the non-temporal case of spectral clustering, we've highlighted some fairly different patterns, especially in the western part of the county. Whether this is a feature or a bug depends on your goals. The algorithm's behavior reflects the fact that tracts don't change demographics very quickly over the time period we are considering, and so clusters tend to be quite persistent. The result of this persistence is that the "first" clusters that this method tends to find are sometimes not very informative -- they are just joining together a few tracts that haven't changed in time at all. So, it's fair to say that more work here is needed. 
+ The algorithm's behavior reflects the fact that tracts don't change demographics very quickly over the time period we are considering, and so clusters tend to be quite persistent. 
 
-However, there's also a substantial amount of signal in the clusters. For example, the clustering detects that the historically white community of Grosse Point (the far eastern tip) has somewhat receded from 1990 to 2010, with its western-most areas being "absorbed" into the predominantly black cluster. This is easy to see if you visualize raw percentages in each tract over time, which we do for reference at the end of this document. 
+However, there's also a substantial amount of signal in the clusters. For example, the clustering detects that the historically white community of Grosse Point (the far eastern tip) has somewhat receded from 1990 to 2010, with its western-most areas being "absorbed" into a predominantly black cluster. 
 
 ## Agglomerative Clustering
 
@@ -326,15 +330,35 @@ divergence <- function(n,m){
 		sum(m + n) / sum(M) * DKL(p_bar, r)
 }
 
-
 a <- info_cluster(g, divergence)
-k <- 10
-g <- g %>% set_vertex_attr('cluster', value = a %>% cutree(k))
+k <- 9
+
 ```
 
-Now we visualize the result...
+
+We can get a sense of where to split the result by looking at `height` element of `a`: 
+```{r}
+plot(rev(max(a$height) - a$height), log = 'x')
+```
+
+```{r}
+data_frame(height = a$height, 
+		   n = length(a$height):1) %>% 
+	mutate(value = lead(height) - height) %>% 
+	filter(value > 0, !is.na(value)) %>% 
+	ggplot() + 
+	aes(x = n, y = value) + 
+	geom_point() + 
+	scale_x_continuous(limit = c(NA, 20)) 
+	# scale_y_continuous(trans = 'log', limit = c(1e-6,NA)) 
+```
+
+There's a fair bit of subjectivity in interpreting plots like this. We see that there's a huge information gain associated with using two clusters, which rapidly falls off. Let's use $k = 7$: 
+
 
 ```{r, fig.height = 2.5, fig.width = 8}
+k <- 7
+g <- g %>% set_vertex_attr('cluster', value = a %>% cutree(k))
 
 # get the edges, only including ones that are "within" a time slice. 
 edges <- g %>% 
@@ -363,49 +387,36 @@ ggplot() +
 	geom_point(aes(x = x, y = y, color = as.character(cluster)), size = 1, data = nodes) + 
 	facet_wrap(~t) + 
 	scale_size_continuous(range = c(0,1)) + 
-	ggthemes::theme_map() + 
+	theme_map() + 
 	guides(color = FALSE, size = FALSE) + 
 	scale_color_manual(values = pal(k)) 
+```
+
+```{r, echo = FALSE, include = FALSE}
+nodes <- data_frame(geoid = V(g)$geoid,
+						x = V(g)$x, 
+					y = V(g)$y, 
+					t = V(g)$t, 
+					cluster = V(g)$cluster)
+tracts %>% 
+	left_join(nodes, by = c('GEOID' = 'geoid')) %>% 
+	ggplot() + 
+	geom_sf(aes(fill = as.character(cluster)), size = 0) +  
+	facet_wrap(~t) + 
+	theme_map() + 
+	guides(fill = FALSE)
 ```
 
 Unlike spectral clustering, hierarchical clustering picked up on a pretty interesting trend: the expanding yellow cluster in the southwest reflects gradual black settlement in the historically-white suburbs.  
 
 This version of hierarchical clustering is greedily information-maximizing, so it's useful to ask how much information is captured by the clustering. This particular clustering uses ```r k``` clusters to capture ```r a$height[length(a$height)] - a$height[length(a$height) - k]``` nats of information, out of ```r a$height[length(a$height)] ``` total. So, despite the fact that our data set has ```r nrow(race_temporal) / n_distinct(race_temporal$group)``` tracts in it, we can "tell most of the story" with just ```r k``` super-tracts. 
  
-# Reference: White-Black Segregation in Detroit
-
-```{r}
-
-# construct a data frame of percentages. 
-percent_df <- race_temporal %>% 
-	filter(t %in% c(1990, 2010)) %>% 
-	group_by(tract, t) %>% 
-	mutate(percent = n /sum(n)) %>%
-	rename(race = group) %>% 
-	filter(race %in% c('Black', 'White')) 
-
-# plot the df 
-pal <- brewer.pal(9, 'Blues') %>% 
-	colorRampPalette()
-
-f_tracts %>%
-	left_join(percent_df, by = c('id' = 'tract')) %>% 
-	tbl_df() %>% 
-	ggplot() +
-	aes(x = long, y = lat, group = group, fill = percent) + 
-	geom_polygon() + 
-	facet_grid(t ~ race) + 
-	ggthemes::theme_map() + 
-	scale_fill_distiller(palette = 'BuPu', direction = 1) + 
-	theme(panel.background = element_rect(fill = 'grey80'))
-	
-```
-
-
-
+ 
+ 
 # Future Work
 
-Priorities for future work on `compx` include refinement clustering methods, performance enhancements, and improvements TBD based on suggestions from those in the planning and sociological communities. 
+Priorities for future work on `compx` include refinement clustering methods, performance enhancements, and improvements TBD based on suggestions from those in the planning and sociological communities. A particular future improvement would be the addition of a factor that increased the importance of temporal differences, allowing spectral methods to find more dynamic structure. 
+
 
 # Session Information
 

@@ -120,13 +120,13 @@ add_data <- function(adj, data){
 
 
 #' We are assuming a divergence function, defined by the user,
-#' that takes in n_1 and n_2 and returns a number. No square rooting
-#' should be necessary; this should be handled in the function itself.
+#' that takes in n_1 and n_2 and returns a number.
 
 information_distances <- function(adj, divergence){
 
 	adj %>%
-		mutate(dist = map2_dbl(n_1, n_2, divergence))
+		mutate(dist = map2_dbl(n_1, n_2, divergence),
+			   dist = ifelse(is.na(dist), Inf, dist)) # bit of a hack
 }
 
 #' @export

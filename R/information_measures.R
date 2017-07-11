@@ -27,9 +27,6 @@ simplex_check <- function(p, allow_zero = TRUE){
 #' @export
 
 simplex_normalize <- function(p){
-	if (min(p >= 0) == 0){
-		stop("Vector has negative entries")
-	}
 
 	normed <- p / sum(p)
 	# if (min(p > 0) == 0){
