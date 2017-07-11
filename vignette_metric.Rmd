@@ -39,9 +39,9 @@ library(maptools)     # plot the tracts
 library(RColorBrewer) # for plots
 library(ggthemes)     # for theme_map
 library(viridis)      # for color scales
-library(units)        # needed (can we pull this into the package?)
-library(sf)           # needed (can we pull this into the package?)
-library(scales)
+library(units)        # needed by sf
+library(sf)           # for io and viz
+library(scales)       # for ggplot2 viz
 ```
 
 Please note that the `geom_sf` function used by `ggplot2` to visualize maps below is, at the time of writing, only available on the development branch of `ggplot2`. This version can be obtained by running
@@ -182,10 +182,11 @@ It's useful to plot these scalars to see how they behave visually. For example, 
 tracts %>% 
 	left_join(metric_df, by = c('GEOID' = 'geoid')) %>% 
 	ggplot() + 
-	geom_sf(aes(fill = trace), size = 0) + 
+	geom_sf(aes(fill = trace), size = .1) + 
 	viridis::scale_fill_viridis(trans = 'log10') + 
 	ggthemes::theme_map() + 
-	theme(legend.position = c(.8, .1))
+	theme(legend.position = c(.8, .1)) +
+	guides(fill = guide_colorbar(title = expression(italic(j[x]))))
 ```
 
 One way to think about the more intense areas with higher traces is that they are areas of *transition*. If you compare this visualization to, e.g. UVA's [Racial Dot Map](https://demographics.virginia.edu/DotMap/index.html) you'll find that the lighter areas correspond to the predominating white/black boundary, as well as smaller subdivisions. 
@@ -246,8 +247,8 @@ trace_df <- metric_df %>%
 tracts %>%
 	left_join(trace_df, by = c('GEOID' = 'geoid')) %>% 
 	ggplot() +
-	geom_sf(aes(fill = trace), size = 0) + 
-	scale_fill_viridis(option = 'magma', limits = c(NA, 1e1), trans = 'log10', oob = squish) +
+	geom_sf(aes(fill = trace), size = .1) + 
+	scale_fill_viridis(option = 'magma', limits = c(1e-4, 5e0), trans = 'log10', oob = squish) +
 	theme_map() +
 	facet_wrap(~t) +
 	theme(legend.position = c(.9,0),
@@ -264,7 +265,7 @@ t_df <- metric_df %>%
 tracts %>%
 	left_join(t_df, by = c('GEOID' = 'geoid')) %>%
 	ggplot() +
-	geom_sf(aes(fill = temporal), size = 0) + 
+	geom_sf(aes(fill = temporal), size = .1) + 
 	scale_fill_viridis(option = 'magma', trans = 'log10', limits = c(NA, 5e-2), oob = squish) +
 	theme_map() +
 	facet_wrap(~t) +
