@@ -7,9 +7,9 @@
 DKL(n, m)
 }
 \arguments{
-\item{p}{the 'true' distribution}
+\item{n}{the 'true' distribution}
 
-\item{q}{the estimated distribution}
+\item{m}{the estimated distribution}
 }
 \value{
 numeric the divergence between p and q

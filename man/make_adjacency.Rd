@@ -2,14 +2,18 @@
 % Please edit documentation in R/constructors.R
 \name{make_adjacency}
 \alias{make_adjacency}
-\title{make a thing}
+\title{Construct an adjacency tibble from an sf data.frame of polygons}
 \usage{
-make_adjacency(tracts, ...)
+make_adjacency(tracts)
 }
 \arguments{
-\item{tracts}{the spdf}
+\item{tracts}{an sf data.frame in which the `geometry` column holds polygons}
+}
+\value{
+df a two-column tibble in which two ids appear in the same row iff
+their corresponding polygons are related according to the '****1****' DE9-IM pattern. Learn more about these patterns at the [wikipedia page](https://en.wikipedia.org/wiki/DE-9IM).
 }
 \description{
-make a thing
+Construct an adjacency tibble from an sf data.frame of polygons
 }
 

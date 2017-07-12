@@ -15,7 +15,7 @@ id_lookup <- function(tracts, key_col = 'GEOID'){
 		data_frame(row = as.character(1:length(.)), geoid = .)
 }
 
-#'
+#' Construct an adjacency tibble from an sf data.frame of polygons
 #' @param tracts an sf data.frame in which the `geometry` column holds polygons
 #' @return df a two-column tibble in which two ids appear in the same row iff
 #' their corresponding polygons are related according to the '****1****' DE9-IM pattern. Learn more about these patterns at the [wikipedia page](https://en.wikipedia.org/wiki/DE-9IM).

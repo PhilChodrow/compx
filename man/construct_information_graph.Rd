@@ -2,11 +2,18 @@
 % Please edit documentation in R/constructors.R
 \name{construct_information_graph}
 \alias{construct_information_graph}
-\title{The graph?}
+\title{Construct an igraph graph object from the centroids of tracts stored as an sf data.frame, where tracts are linked iff adjacent.}
 \usage{
 construct_information_graph(tracts, data_df, divergence)
 }
+\arguments{
+\item{tracts}{an sf data.frame storing polygons in the geometry column}
+
+\item{data_df}{a tibble containing demographic data}
+
+\item{divergence}{the divergence function with which to compare demographic distributions, one of c(DKL, euc, cum_euc).}
+}
 \description{
-The graph?
+Construct an igraph graph object from the centroids of tracts stored as an sf data.frame, where tracts are linked iff adjacent.
 }
 

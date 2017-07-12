@@ -4,8 +4,8 @@
 \name{geometry}
 \alias{geometry}
 \alias{geometry-package}
-\title{geometry}
+\title{tractwise geometry}
 \description{
-geometry
+tractwise geometry
 }
 
