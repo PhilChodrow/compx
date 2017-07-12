@@ -1,3 +1,4 @@
+
 make_matrices <- function(data, tracts){
 	coord_vars <- c('x', 'y')
 	spatial <- coords_df(tracts, km = T)
@@ -31,7 +32,6 @@ kernel_matrix <- function(X, sigma = c(1,1,10)){
 	K <- exp(-distances^2)
 	return(K)
 }
-
 
 rbf_matrix_smoother <- function(X, N, sigma = c(1,1,10)){
 	K <- kernel_matrix(X, sigma)
