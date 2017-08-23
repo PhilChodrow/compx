@@ -2,7 +2,7 @@
 title: "Analyzing Spatial Segregation with Information Geometry"
 subtitle: "Spatial Network Analysis"
 author: "Phil Chodrow"
-date: "February 10th, 2017"
+date: "August 23rd, 2017"
 output: 
   html_document:
     theme: sandstone
@@ -22,7 +22,7 @@ This document is an example to the tools that `compx` provides to study spatial 
 
 # Preparation
 
-In the [previous vignette](https://philchodrow.github.io/compx/vignette_metric.html) on the computing witht he metric tensor, we obtained `compx` and prepared our data. If the following code looks unfamiliar, please take a moment to read that vignette. 
+In the [previous vignette](https://philchodrow.github.io/compx/vignette_metric.html) on the computing with the metric tensor, we obtained `compx` and prepared our data. If the following code looks unfamiliar, please take a moment to read that vignette. 
 
 ## Libraries
 
@@ -55,8 +55,6 @@ Additionally, you may include an optional column for time `t`. `compx` functions
 We now prepare the data we'll use: 
 ```{r}
 
-
-
 tracts_to_use <- detroit_race %>% 
 	group_by(tract, t) %>%
 	summarise(n = sum(n)) %>%
@@ -80,9 +78,14 @@ Similarly to the `hessian` argument of `compute_metric`, here you need to specif
 
 ```{r}
 js_dist <- function(n,m){
-	p <- n / sum(n)
-	q <- m / sum(m)
-	sqrt(.5 * DKL(p, p+q) + .5*DKL(q, p+q))
+	
+	N <- sum(n)
+	M <- sum(m)
+	
+	p <- n/N
+	q <- m/M
+	
+	sqrt((N/(M+N))*DKL(p, p+q) + (M/(M+N))*DKL(q, p+q))
 }
 ```
 
@@ -129,7 +132,7 @@ data.frame(n = 1:30, ev = 1 - rev(Re(evL$values))[1:30]) %>%
 	aes(x = n, y = ev) +
 	geom_line() +
 	geom_point() +
-	scale_y_continuous(trans = 'log10') + 
+	# scale_y_continuous(trans = 'log10') + 
 	geom_vline(xintercept  = 7.5, linetype = 'dashed') + 
 	geom_vline(xintercept  = 9.5, linetype = 'dashed') + 
 	geom_vline(xintercept = 10.5, linetype = 'dashed') + 
@@ -174,7 +177,7 @@ g        <- g %>% set_vertex_attr(name = 'cluster',
 We've also provided a convenience function that will do the same thing; it's just a wrapper around the code above.  
 
 ```{r, eval = FALSE}
-g <- g %>% spectral_cluster(sigma = 100, k = k, nreps = nreps)
+g <- g %>% spectral_cluster(sigma = 50, k = k, nreps = nreps)
 ```
 
 Either way, now we can plot the result: 
@@ -201,41 +204,21 @@ This is a reasonably strong result; the clustering has detected the predominatin
 
 ## Agglomerative Hierarchical Clustering
 
-Another approach is to use hierarchical clustering on the network. From a theoretical perspective, this approach has both virtues and drawbacks. Its virtues are that it can be viewed as a form of direct information-maximization; its main drawback is that it's greedy and therefore has the potential to give very poor solutions. Empirically, however, it seems to do ok on the data sets we work with. 
-
-For some technical reasons that I won't discuss here, a different divergence function is more appropriate for this case. 
+Another approach is to use hierarchical clustering on the network. From a theoretical perspective, this approach has both virtues and drawbacks. Its virtues are that it can be viewed as a form of direct information-maximization; its main drawback is that it's greedy and therefore has the potential to give very poor solutions. Empirically, however, it seems to do ok on the data sets we work with. Agglomerative clustering may be performed on either the `tracts` and demographic data directly, or on the information graph. We'll show it the first way for the static case, and then use it on the information graph for the temporal case: 
 
 ```{r}
-M <- race_2010 %>%
-	group_by(group) %>%
-	summarise(n = sum(n)) %>%
-	select(n) %>% unlist()
-
-divergence <- function(n,m){
-	p <- n / sum(n)
-	q <- m / sum(m)
-	p_bar <- sum(n) / sum(m + n) * p + sum(m) / sum(m + n) * q
-	r <- M / sum(M)
-	sum(n) / sum(M) * DKL(p, r) +
-		sum(m) / sum(M)*DKL(q, r) -
-		sum(m + n) / sum(M) * DKL(p_bar, r)
-}
-
-a <- info_cluster(g, divergence)
-g <- g %>% set_vertex_attr('cluster', value = a %>% cutree(k))
+a <- h_clust(tracts, race_2010)
 ```
 
 Now let's take a look: 
 
 ```{r}
-nodes    <- data_frame(geoid = V(g)$name, cluster = V(g)$cluster)
-
 pal <- scales::brewer_pal(palette = 'Set3')
 pal <- colorRampPalette(pal(k))
 pal <- pal(k)
 
 tracts %>% 
-	left_join(nodes, by = c('GEOID' = 'geoid')) %>% 
+	mutate(cluster = a %>% cutree(k)) %>% # add cluster labels
 	ggplot() + 
 	geom_sf(aes(fill = as.character(cluster)), size = .1) +
 	ggthemes::theme_map() + 
@@ -244,7 +227,7 @@ tracts %>%
 	guides(fill = guide_legend(title = 'Cluster'))
 ```
 
-We can see that we've extracted a fairly different set of clusters. Hierarchical clustering is sensitive to population densities, and will tend to seek divisions between high-population areas, which spectral clustering will not do. 
+We can see that we've extracted a similar set of clusters, but there are some differences; primarily, cluster 3 is more expansive than the corresponding cluster under spectral clustering. Whether this is desired behavior depends on the context. The difference may be ascribed to either the greedy nature of hierarchical clustering or the fact that unlike spectral methods it weights population densities; separating out these considerations in practice may be difficult. 
 
 # Spatiotemporal Networks
 
@@ -292,9 +275,7 @@ tracts %>%
 
 ```
 
-The similar clusterings over time reflect the fact that tracts don't change demographics very quickly over the time period we are considering, and so clusters tend to be quite persistent. 
-
-However, there's also at least one interesting signal in the clusters. For example, the clustering detects that the historically white-dominated area centered at Grosse Point (Cluster 1) has  receded from 1990 to 2010, with its western-most areas being "absorbed" into a predominantly black cluster. 
+Spectral clustering is structurally sensitive to very large differences between tracts. Since tracts don't tend to change dramatically in 10-year periods, the spectral solutions are relatively persistent over time. There is an exception: the historically white-dominated area centered at Grosse Point (Cluster 1) has  receded from 1990 to 2010, with its western-most areas being "absorbed" into a predominantly black cluster. 
 
 We can easily visualize changing demographics within each of the clusters:
 ```{r}
@@ -315,34 +296,16 @@ Not only has the white-dominated area centered at Grosse Pointe become geographi
 
 ## Agglomerative Clustering
 
-Agglomerative hierarchical clustering tends to be more willing to see individual tracts change clusters over time: 
+Agglomerative hierarchical clustering tends to be more willing to see individual tracts change clusters over time. This time we'll use the `h_clust` function on the information graph: 
 
 ```{r}
-
-M <- race_temporal %>%
-	group_by(group) %>%
-	summarise(n = sum(n)) %>%
-	select(n) %>% unlist()
-
-divergence <- function(n,m){
-	p <- n / sum(n)
-	q <- m / sum(m)
-	p_bar <- sum(n) / sum(m + n) * p + sum(m) / sum(m + n) * q
-	r <- M / sum(M)
-	sum(n) / sum(M) * DKL(p, r) +
-		sum(m) / sum(M)*DKL(q, r) -
-		sum(m + n) / sum(M) * DKL(p_bar, r)
-}
-
-a <- info_cluster(g, divergence)
-k <- 9
-
+b <- h_clust(g)
 ```
 
 
 ```{r}
-data_frame(height = a$height, 
-		   n = length(a$height):1) %>% 
+data_frame(height = b$height, 
+		   n = length(b$height):1) %>% 
 	mutate(value = lead(height) - height) %>% 
 	filter(value > 0, !is.na(value)) %>% 
 	ggplot() + 
@@ -354,10 +317,9 @@ data_frame(height = a$height,
 
 There's a fair bit of subjectivity in interpreting plots like this. We see that there's a huge information gain associated with using two clusters, which rapidly falls off. Let's use $k = 7$: 
 
-
 ```{r, fig.height = 2.5, fig.width = 8}
 k <- 7
-g <- g %>% set_vertex_attr('cluster', value = a %>% cutree(k))
+g <- g %>% set_vertex_attr('cluster', value = b %>% cutree(k))
 
 # get the edges, only including ones that are "within" a time slice. 
 nodes    <- data_frame(geoid = V(g)$geoid, t = V(g)$t, cluster = V(g)$cluster) 
@@ -378,13 +340,13 @@ tracts %>%
 	facet_wrap(~t)
 ```
 
-Unlike spectral clustering, hierarchical clustering picked up on a pretty interesting trend: the expanding yellow cluster in the southwest reflects gradual black settlement in the historically-white suburbs in the form of Cluster 4.  
+Unlike spectral clustering, the hierarchical method tends to generate clusters that vary substantially over time. However, these clusters don't track quite as strongly visual boundaries in the data, suggesting that pure hierarchical methods may not be desirable here. It's possible to use spectral methods as preprocessing to generate a form of regularization for subsequent hierarchical organization, but we won't pursue that further here. 
 
-This version of hierarchical clustering is greedily information-maximizing, so it's useful to ask how much information is captured by the clustering. This particular clustering uses ```r k``` clusters to capture ```r a$height[length(a$height)] - a$height[length(a$height) - k]``` nats of information, out of ```r a$height[length(a$height)] ``` total. So, despite the fact that our data set has ```r nrow(race_temporal) / n_distinct(race_temporal$group)``` tracts in it, we can "tell most of the story" with just ```r k``` super-tracts. 
+This version of hierarchical clustering is greedily information-maximizing, so it's useful to ask how much information is captured by the clustering. This particular clustering uses ```r k``` clusters to capture ```r a$height[length(a$height)] - a$height[length(a$height) - k]``` nats of information, out of ```r a$height[length(a$height)] ``` total. So, despite the fact that our data set has ```r nrow(race_temporal) / n_distinct(race_temporal$group)``` tracts in it, we can "tell most of the story" with just ```r k``` super-tracts.
  
 # Future Work
 
-Priorities for future work on `compx` include refinement clustering methods, performance enhancements, and improvements TBD based on suggestions from those in the planning and sociological communities. A particular future improvement would be the addition of a factor that increased the importance of temporal differences, allowing spectral methods to find more dynamic structure. 
+Priorities for future work on `compx` include refinement of clustering methods, performance enhancements, and improvements TBD based on suggestions from those in the planning and sociological communities. ZA particular future improvement would be the addition of a factor that increased the importance of temporal differences, allowing spectral methods to find more dynamic structure. 
 
 # Session Information
 

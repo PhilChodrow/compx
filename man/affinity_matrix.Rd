@@ -4,7 +4,7 @@
 \alias{affinity_matrix}
 \title{Construct an affinity matrix for a graph g based on the dist edge attribute}
 \usage{
-affinity_matrix(g, sigma = 1)
+affinity_matrix(g, sigma = 1, pop_weights = FALSE)
 }
 \arguments{
 \item{g}{an igraph::graph with a dist edge attribute/}

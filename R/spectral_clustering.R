@@ -11,23 +11,14 @@ NULL
 #' @return a matrix containing the affinities computed with the quadratic exponential
 #' affinity kernel
 #' @export
-affinity_matrix <- function(g, sigma = 1){
+affinity_matrix <- function(g, sigma = 1, pop_weights = FALSE){
 
-	adj <- as_adj(g)
-
-	# if(sparse){
+	adj   <- as_adj(g)
 	dists <- as_adj(g, attr = 'dist')
-	# }else{
-	# 	dists <- distances(g, weights = E(g))
-	# }
 
-	# if(sparse){
 	A <- exp(-dists^2 * sigma) * adj
-	# }else{
-	# 	A <- exp(-dists^2 * sigma)
-	# 	A[is.na(A)] <- 0
-	# }
 	A
+
 }
 
 #' Construct a generalized laplacian matrix
