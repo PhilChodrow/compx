@@ -22,7 +22,7 @@ id_lookup <- function(tracts, key_col = 'GEOID'){
 #' @export
 make_adjacency <- function(tracts){
 	lookup  <- id_lookup(tracts)
-	adj_mat <- st_relate(tracts, pattern = '****1****', sparse = TRUE) # as sparse list
+	adj_mat <- st_relate(tracts, pattern = '****T****', sparse = TRUE) # as sparse list
 	1:length(adj_mat) %>%
 		map(~data_frame(from = as.character(.),
 						to = as.character(adj_mat[[.]]))) %>%
@@ -96,7 +96,7 @@ undirect <- function(adj, allow_self_loops = FALSE){
 	out %>% select(-key)
 }
 
-
+#' @export
 add_data <- function(adj, data){
 
 	all_ids <- c(adj$geoid_1, adj$geoid_2) %>% unique()
