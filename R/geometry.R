@@ -86,7 +86,7 @@ compute_derivatives <- function(adj, r_sigma = 1, s_sigma = 1, smooth = F){
 			   Y = map2(p_1, p_2, ~.x - .y))
 
 	out_df <- adj %>%
-		mutate(regression_weight = exp(- distance^2 / (2*r_sigma) )) %>%
+		mutate(regression_weight = exp(- distance^2 / (2*r_sigma))) %>%
 		select_(.dots = select_vars) %>%
 		group_by_(.dots = group_vars) %>%
 		filter(n() > 2) %>%
@@ -162,6 +162,11 @@ compute_hessian <- function(adj, hessian = DKL_){
 #' @export
 
 compute_metric <- function(tracts, data, km = T, r_sigma = 100, s_sigma = 1, smooth = F, hessian = euc_){
+
+	if(st_crs(tracts)$epsg != 4326){
+		warning("Warning: compx expects lon-lat projected data (crs = 4326). Please consider reprojecting.")
+		}
+
 
 	out <- tracts %>%
 		filter(GEOID %in% data$tract) %>%
