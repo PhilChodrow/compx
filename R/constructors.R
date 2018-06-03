@@ -215,6 +215,10 @@ add_coordinates <- function(g, tracts, ...){
 #' @export
 
 construct_information_graph <- function(tracts, data_df, divergence){
+
+	assertthat::assert_that(class(tracts$GEOID) == "character")
+	assertthat::assert_that(class(data_df$tract) == "character")
+
 	adj <- tracts %>%
 		filter(GEOID %in% data_df$tract) %>%
 		make_adjacency()

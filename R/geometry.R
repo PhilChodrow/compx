@@ -163,9 +163,9 @@ compute_hessian <- function(adj, hessian = DKL_){
 
 compute_metric <- function(tracts, data, km = T, r_sigma = 100, s_sigma = 1, smooth = F, hessian = euc_){
 
-	if(st_crs(tracts)$epsg != 4326){
-		warning("Warning: compx expects lon-lat projected data (crs = 4326). Please consider reprojecting.")
-		}
+
+	assertthat::assert_that(st_crs(tracts)$epsg == 4326, msg = "compx expects lon-lat projected data (crs = 4326). Please try tracts <- st_transform(tracts, 4326).")
+
 
 
 	out <- tracts %>%
